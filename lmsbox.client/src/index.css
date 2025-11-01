@@ -1,0 +1,35 @@
+    @import "tailwindcss";
+    @theme{
+        --color-login-page-bg: #F5F5EF;
+        --color-login-box-bg: #1b365d;
+        --color-login-box-text: #FFFFFF;
+        --color-login-box-link-text: #FFFFFF;
+        --color-login-btn-bg: #2afeae;
+        --color-login-btn-text: #1b365d;
+        --color-login-input-bg: #FFFFFF;
+        --color-login-input-border: #FFFFFF;
+        
+        --color-logout-btn: #2afeae;
+        --color-logout-btn-text: #1b365d;
+
+        --color-confirm-btn-hover: #2afeae;
+        --color-confirm-btn: #1b365d;
+        --color-confirm-btn-text-hover: #1b365d;
+        --color-confirm-btn-text: #FFFFFF;
+
+        --color-page-bg: #F5F5EF;
+        --color-page-dark-bg: #1b365d;
+        --color-page-txt: #36454F;
+
+        --color-boxlms-navbar: #1b365d;
+        --color-boxlms-navbar-txt: #FFFFFF;
+        --color-boxlms-navbar-active: #2afeae;
+        --color-boxlms-profile: #2afeae;
+
+        --color-boxlms-primary-btn: #2afeae;
+        --color-boxlms-secondary-btn: #1b365d;
+        --color-boxlms-primary-btn-txt: #1b365d;
+        --color-boxlms-secondary-btn-txt: #FFFFFF;
+
+        --color-boxlms-primary-body-txt: #1b365d;
+    }

@@ -1,0 +1,17 @@
+{
+  "default": {
+    "name": "LMSBOX",
+    "primaryColor": "#1b365d",
+    "logo": "/src/assets/lmsbox-logo.png"
+  },
+  "acme": {
+    "name": "Acme Corp",
+    "primaryColor": "#e11d48",
+    "logo": "/assets/acme-logo.png"
+  },
+  "globex": {
+    "name": "Globex Inc.",
+    "primaryColor": "#059669",
+    "logo": "/assets/globex-logo.png"
+  }
+}
