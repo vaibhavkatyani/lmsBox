@@ -45,6 +45,11 @@ namespace lmsbox.infrastructure.Data
         // Revoked JWTs (logout blacklist)
         public DbSet<RevokedToken> RevokedTokens { get; set; } = null!;
 
+        // Learning Pathways
+        public DbSet<LearningPathway> LearningPathways { get; set; } = null!;
+        public DbSet<PathwayCourse> PathwayCourses { get; set; } = null!;
+        public DbSet<LearnerPathwayProgress> LearnerPathwayProgresses { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -52,8 +57,10 @@ namespace lmsbox.infrastructure.Data
             builder.ApplyConfiguration(new CourseConfiguration());
             builder.ApplyConfiguration(new LessonConfiguration());
             builder.ApplyConfiguration(new CourseAssignmentConfiguration());
-            builder.ApplyConfiguration(new LessonConfiguration());
             builder.ApplyConfiguration(new LearningGroupConfiguration());
+            builder.ApplyConfiguration(new LearningPathwayConfiguration());
+            builder.ApplyConfiguration(new PathwayCourseConfiguration());
+            builder.ApplyConfiguration(new LearnerPathwayProgressConfiguration());
 
             // Optional: keep revoked tokens short-lived and index expiry for cleanup queries
             builder.Entity<RevokedToken>()

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AdminHeader from '../components/AdminHeader';
 import toast from 'react-hot-toast';
-import { getUserGroup, saveUserGroup, listCoursesForMapping, listUsers } from '../services/userGroups';
+import { getUserGroup, saveUserGroup, listCoursesForMapping, listUsers } from '../services/learningPathways';
 import usePageTitle from '../hooks/usePageTitle';
 
 export default function AdminUserGroupEditor() {
@@ -10,7 +10,7 @@ export default function AdminUserGroupEditor() {
   const { groupId } = useParams();
   const isNew = !groupId;
 
-  usePageTitle(isNew ? 'Add User Group' : 'Edit User Group');
+  usePageTitle(isNew ? 'Add Learning Pathway' : 'Edit Learning Pathway');
 
   const [form, setForm] = useState({
     name: '',
@@ -47,7 +47,7 @@ export default function AdminUserGroupEditor() {
           });
         } catch (e) {
           console.error(e);
-          toast.error('Failed to load group');
+          toast.error('Failed to load pathway');
         }
       })();
     }
@@ -135,7 +135,7 @@ export default function AdminUserGroupEditor() {
       const payload = { id: groupId, ...form };
       await saveUserGroup(payload, !isNew);
       toast.success(isNew ? 'Learning pathway created' : 'Learning pathway updated');
-      navigate('/admin/user-groups');
+      navigate('/admin/learning-pathways');
     } catch (e) {
       console.error(e);
       toast.error('Failed to save pathway');
@@ -201,7 +201,7 @@ export default function AdminUserGroupEditor() {
                   onChange={(e) => handleChange('description', e.target.value)}
                   className="w-full border border-gray-300 rounded px-4 py-2"
                   rows={4}
-                  placeholder="Describe this group"
+                  placeholder="Describe this pathway"
                 />
               </div>
             </div>
@@ -211,7 +211,7 @@ export default function AdminUserGroupEditor() {
           {tab === 'courses' && (
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-600">Assign courses that all users in this group can access.</p>
+                <p className="text-sm text-gray-600">Assign courses that all users in this pathway can access.</p>
                 <button
                   onClick={openCoursePicker}
                   className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 cursor-pointer"
@@ -286,7 +286,7 @@ export default function AdminUserGroupEditor() {
           {tab === 'users' && (
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-600">Assign users to this group.</p>
+                <p className="text-sm text-gray-600">Assign users to this pathway.</p>
                 <button
                   onClick={openUserPicker}
                   className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 cursor-pointer"

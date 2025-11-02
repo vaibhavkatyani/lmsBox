@@ -121,7 +121,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/user-groups"
+            path="/admin/learning-pathways"
             element={
               <AdminRoute>
                 <AdminUserGroups />
@@ -129,7 +129,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/user-groups/new"
+            path="/admin/learning-pathways/new"
             element={
               <AdminRoute>
                 <AdminUserGroupEditor />
@@ -137,7 +137,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/user-groups/:groupId/edit"
+            path="/admin/learning-pathways/:groupId/edit"
             element={
               <AdminRoute>
                 <AdminUserGroupEditor />

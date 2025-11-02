@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import AdminHeader from '../components/AdminHeader';
 import toast from 'react-hot-toast';
 import { getUser, saveUser } from '../services/users';
-import { listUserGroups } from '../services/userGroups';
+import { listUserGroups } from '../services/learningPathways';
 import usePageTitle from '../hooks/usePageTitle';
 
 export default function AdminUserEditor() {

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminHeader from '../components/AdminHeader';
 import toast from 'react-hot-toast';
-import { listUserGroups, deleteUserGroup } from '../services/userGroups';
+import { listUserGroups, deleteUserGroup } from '../services/learningPathways';
 import usePageTitle from '../hooks/usePageTitle';
 
 export default function AdminUserGroups() {
@@ -11,7 +11,7 @@ export default function AdminUserGroups() {
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
 
-  usePageTitle('User Groups');
+  usePageTitle('Learning Pathways');
 
   React.useEffect(() => {
     loadGroups();
@@ -36,8 +36,8 @@ export default function AdminUserGroups() {
     return groups.filter((g) => g.name.toLowerCase().includes(q) || (g.description || '').toLowerCase().includes(q));
   }, [groups, query]);
 
-  const onEdit = (id) => navigate(`/admin/user-groups/${id}/edit`);
-  const onCreate = () => navigate('/admin/user-groups/new');
+  const onEdit = (id) => navigate(`/admin/learning-pathways/${id}/edit`);
+  const onCreate = () => navigate('/admin/learning-pathways/new');
 
   const onDelete = async (id) => {
     if (!window.confirm('Delete this learning pathway? Users will lose access to mapped courses.')) return;
@@ -80,7 +80,7 @@ export default function AdminUserGroups() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Group Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pathway Name</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Courses</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Users</th>

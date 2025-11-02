@@ -117,7 +117,7 @@ export default function AdminHeader() {
                 { to: '/admin/dashboard', label: 'Dashboard' },
                 { to: '/admin/users', label: 'Users' },
                 { to: '/admin/courses', label: 'Courses' },
-                { to: '/admin/user-groups', label: 'Learning Pathways' },
+                { to: '/admin/learning-pathways', label: 'Learning Pathways' },
                 { to: '/admin/reports', label: 'Reports' }
               ].map((link) => (
                 <li key={link.to} className="nav-item relative group">
