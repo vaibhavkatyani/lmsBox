@@ -28,10 +28,13 @@ public class AdminCoursesController : ControllerBase
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<AdminCourseListResponse>> GetCourses(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
         [FromQuery] string? status = "all",
         [FromQuery] string? category = "all",
-        [FromQuery] string? sort = "updated_desc")
+        [FromQuery] string sortBy = "updatedAt",
+        [FromQuery] string sortOrder = "desc")
     {
         try
         {
@@ -42,6 +45,11 @@ public class AdminCoursesController : ControllerBase
             {
                 return Unauthorized(new { message = "User not authenticated" });
             }
+
+            // Validate pagination parameters
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
 
             // Get user's organization
             var user = await _context.Users
@@ -87,19 +95,38 @@ public class AdminCoursesController : ControllerBase
                 query = query.Where(c => c.Category != null && c.Category.ToLower() == category.ToLower());
             }
 
+            // Get total count before pagination
+            var totalCount = await query.CountAsync();
+
             // Sorting
-            query = sort switch
+            var sortByLower = sortBy.ToLower();
+            var sortOrderLower = sortOrder.ToLower();
+
+            query = sortByLower switch
             {
-                "title_asc" => query.OrderBy(c => c.Title),
-                "title_desc" => query.OrderByDescending(c => c.Title),
-                "created_asc" => query.OrderBy(c => c.CreatedAt),
-                "created_desc" => query.OrderByDescending(c => c.CreatedAt),
-                "updated_asc" => query.OrderBy(c => c.UpdatedAt ?? c.CreatedAt),
-                "updated_desc" => query.OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt),
+                "title" => sortOrderLower == "desc" 
+                    ? query.OrderByDescending(c => c.Title) 
+                    : query.OrderBy(c => c.Title),
+                "createdat" => sortOrderLower == "desc" 
+                    ? query.OrderByDescending(c => c.CreatedAt) 
+                    : query.OrderBy(c => c.CreatedAt),
+                "updatedat" => sortOrderLower == "desc" 
+                    ? query.OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt) 
+                    : query.OrderBy(c => c.UpdatedAt ?? c.CreatedAt),
+                "category" => sortOrderLower == "desc" 
+                    ? query.OrderByDescending(c => c.Category) 
+                    : query.OrderBy(c => c.Category),
+                "status" => sortOrderLower == "desc" 
+                    ? query.OrderByDescending(c => c.Status) 
+                    : query.OrderBy(c => c.Status),
                 _ => query.OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
             };
 
-            var courses = await query.ToListAsync();
+            // Apply pagination
+            var courses = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
 
             var courseList = courses.Select(c => new AdminCourseDto
             {
@@ -119,10 +146,21 @@ public class AdminCoursesController : ControllerBase
                 LessonCount = c.Lessons.Count
             }).ToList();
 
+            var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
             return Ok(new AdminCourseListResponse
             {
                 Courses = courseList,
-                Total = courseList.Count
+                Total = totalCount,
+                Pagination = new
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalPages = totalPages,
+                    TotalCount = totalCount,
+                    HasNextPage = page < totalPages,
+                    HasPreviousPage = page > 1
+                }
             });
         }
         catch (Exception ex)
@@ -471,6 +509,7 @@ public class AdminCourseListResponse
 {
     public List<AdminCourseDto> Courses { get; set; } = new();
     public int Total { get; set; }
+    public object? Pagination { get; set; }
 }
 
 public class AdminCourseDto

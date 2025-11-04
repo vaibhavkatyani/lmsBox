@@ -8,25 +8,51 @@
 
 import api from '../utils/api';
 
-export async function listUserGroups(search = '') {
-  const params = new URLSearchParams();
+export async function listUserGroups(params = {}) {
+  const { 
+    page = 1, 
+    pageSize = 10, 
+    search = '', 
+    sortBy = 'name', 
+    sortOrder = 'asc' 
+  } = params;
+  
+  const queryParams = new URLSearchParams();
+  queryParams.append('page', page);
+  queryParams.append('pageSize', pageSize);
   if (search?.trim()) {
-    params.append('search', search.trim());
+    queryParams.append('search', search.trim());
   }
+  if (sortBy) queryParams.append('sortBy', sortBy);
+  if (sortOrder) queryParams.append('sortOrder', sortOrder);
   
   try {
-    const response = await api.get(`/api/AdminLearningPathways?${params.toString()}`);
+    const response = await api.get(`/api/AdminLearningPathways?${queryParams.toString()}`);
     const data = response.data;
     const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+    
     // Transform API response to match UI expectations
-    return items.map(item => ({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      courseCount: item.courseCount || 0,
-      userCount: item.memberCount || 0
-    }));
-  } catch (_err) {
+    return {
+      items: items.map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        courseCount: item.courseCount || 0,
+        userCount: item.memberCount || 0,
+        createdAt: item.createdAt,
+        createdBy: item.createdBy
+      })),
+      pagination: data.pagination || {
+        currentPage: page,
+        pageSize,
+        totalPages: 1,
+        totalCount: items.length,
+        hasNextPage: false,
+        hasPreviousPage: false
+      }
+    };
+  } catch (err) {
+    console.error('Error fetching user groups:', err);
     // Mock fallback
     const mock = [
       { id: 'ug-1', name: 'Marketing Team', description: 'All marketing department staff', courseCount: 3, userCount: 12 },
@@ -35,9 +61,22 @@ export async function listUserGroups(search = '') {
       { id: 'ug-4', name: 'New Hires 2025', description: 'Onboarding group', courseCount: 4, userCount: 15 },
     ];
     const searchTerm = search?.trim();
-    if (!searchTerm) return mock;
-    const lower = searchTerm.toLowerCase();
-    return mock.filter((m) => m.name.toLowerCase().includes(lower) || (m.description || '').toLowerCase().includes(lower));
+    const filtered = !searchTerm ? mock : mock.filter((m) => 
+      m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (m.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    return {
+      items: filtered,
+      pagination: {
+        currentPage: 1,
+        pageSize: filtered.length,
+        totalPages: 1,
+        totalCount: filtered.length,
+        hasNextPage: false,
+        hasPreviousPage: false
+      }
+    };
   }
 }
 
@@ -115,8 +154,10 @@ export async function deleteUserGroup(groupId) {
 }
 
 // For selecting users to add to group (returns user list)
-export async function listUsers(search = '') {
+export async function listUsers(search = '', page = 1, pageSize = 50) {
   const params = new URLSearchParams();
+  params.append('page', page);
+  params.append('pageSize', pageSize);
   if (search?.trim()) {
     params.append('search', search.trim());
   }
@@ -128,14 +169,18 @@ export async function listUsers(search = '') {
   } catch {
     // Mock
     const mock = [
-      { id: 'u1', name: 'Alice Johnson', email: 'alice@example.com' },
-      { id: 'u2', name: 'Bob Smith', email: 'bob@example.com' },
-      { id: 'u3', name: 'Carol Davis', email: 'carol@example.com' },
+      { id: 'u1', firstName: 'Alice', lastName: 'Johnson', email: 'alice@example.com' },
+      { id: 'u2', firstName: 'Bob', lastName: 'Smith', email: 'bob@example.com' },
+      { id: 'u3', firstName: 'Carol', lastName: 'Davis', email: 'carol@example.com' },
     ];
     const searchTerm = search?.trim();
     if (!searchTerm) return mock;
     const lower = searchTerm.toLowerCase();
-    return mock.filter((u) => u.name.toLowerCase().includes(lower) || u.email.toLowerCase().includes(lower));
+    return mock.filter((u) => 
+      (u.firstName && u.firstName.toLowerCase().includes(lower)) ||
+      (u.lastName && u.lastName.toLowerCase().includes(lower)) ||
+      u.email.toLowerCase().includes(lower)
+    );
   }
 }
 

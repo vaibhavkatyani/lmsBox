@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminHeader from '../components/AdminHeader';
+import Pagination from '../components/Pagination';
 import toast from 'react-hot-toast';
 import { listUsers, deleteUser } from '../services/users';
 import usePageTitle from '../hooks/usePageTitle';
@@ -11,18 +12,41 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    pageSize: 20,
+    totalCount: 0,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  });
 
   usePageTitle('Manage Users');
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [page, pageSize, statusFilter]);
 
-  const loadUsers = async (search = '') => {
+  const loadUsers = async () => {
     setLoading(true);
     try {
-      const items = await listUsers(search);
-      setUsers(items);
+      const result = await listUsers({
+        page,
+        pageSize,
+        search: query,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+      });
+      setUsers(result.items || []);
+      setPagination(result.pagination || {
+        currentPage: 1,
+        totalPages: 1,
+        pageSize: 20,
+        totalCount: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      });
     } catch (e) {
       console.error(e);
       
@@ -51,29 +75,28 @@ export default function AdminUsers() {
   };
 
   const filtered = useMemo(() => {
-    let list = users.slice();
-    
-    // Search
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      list = list.filter((u) => 
-        u.firstName?.toLowerCase().includes(q) || 
-        u.lastName?.toLowerCase().includes(q) || 
-        u.email?.toLowerCase().includes(q)
-      );
-    }
-    
-    // Status filter
-    if (statusFilter !== 'all') {
-      list = list.filter((u) => u.status?.toLowerCase() === statusFilter);
-    }
-    
-    return list;
-  }, [users, query, statusFilter]);
+    // Server-side filtering is now handled by the API
+    return users;
+  }, [users]);
+
+  const handleSearch = () => {
+    setPage(1); // Reset to first page on search
+    loadUsers();
+  };
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (newPageSize) => {
+    setPageSize(newPageSize);
+    setPage(1); // Reset to first page when changing page size
+  };
 
   const resetFilters = () => {
     setQuery('');
     setStatusFilter('all');
+    setPage(1);
   };
 
   const onCreate = () => navigate('/admin/users/new');
@@ -140,11 +163,23 @@ export default function AdminUsers() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSearch();
+                    }
+                  }}
                   placeholder="Search users by name or email"
                   className="w-full border border-gray-300 rounded px-4 py-2"
                 />
                 <span className="absolute right-3 top-2.5 text-gray-400">🔍</span>
               </div>
+
+              <button
+                onClick={handleSearch}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Search
+              </button>
 
               <div className="flex items-center gap-2">
                 <label className="text-sm text-gray-600">Status</label>
@@ -238,6 +273,15 @@ export default function AdminUsers() {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalCount={pagination.totalCount}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
         </div>
       </div>
     </div>

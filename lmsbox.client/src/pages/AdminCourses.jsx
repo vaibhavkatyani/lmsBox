@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminHeader from '../components/AdminHeader';
+import Pagination from '../components/Pagination';
 import toast from 'react-hot-toast';
 import usePageTitle from '../hooks/usePageTitle';
 import { adminCourseService, courseHelpers } from '../services/adminCourses';
@@ -15,26 +16,40 @@ export default function AdminCourses() {
   const [status, setStatus] = useState('all');
   const [category, setCategory] = useState('all');
   const [deleteDialog, setDeleteDialog] = useState({ open: false, course: null });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    pageSize: 20,
+    totalPages: 1,
+    totalCount: 0,
+    hasNextPage: false,
+    hasPreviousPage: false
+  });
 
   usePageTitle('Manage Courses');
 
   // Load courses on component mount and when filters change
   useEffect(() => {
     loadCourses();
-  }, [query, sort, status, category]);
+  }, [query, sort, status, category, page, pageSize]);
 
   const loadCourses = async () => {
     try {
       setLoading(true);
       const response = await adminCourseService.listCourses({
+        page,
+        pageSize,
         search: query.trim() || undefined,
         status: status !== 'all' ? status : undefined,
         category: category !== 'all' ? category : undefined,
-        sort
+        sortBy: sort.split('_')[0],
+        sortOrder: sort.split('_')[1] || 'desc'
       });
       
       const formattedCourses = response.courses.map(courseHelpers.formatCourseForDisplay);
       setCourses(formattedCourses);
+      setPagination(response.pagination || pagination);
     } catch (error) {
       console.error('Error loading courses:', error);
       toast.error('Failed to load courses');
@@ -42,6 +57,15 @@ export default function AdminCourses() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (newPageSize) => {
+    setPageSize(newPageSize);
+    setPage(1);
   };
 
   const categories = useMemo(() => {
@@ -215,6 +239,15 @@ export default function AdminCourses() {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalCount={pagination.totalCount}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
         </div>
       </div>
 

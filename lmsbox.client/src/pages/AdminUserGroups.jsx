@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminHeader from '../components/AdminHeader';
+import Pagination from '../components/Pagination';
 import toast from 'react-hot-toast';
 import { listUserGroups, deleteUserGroup } from '../services/learningPathways';
 import usePageTitle from '../hooks/usePageTitle';
@@ -10,18 +11,29 @@ export default function AdminUserGroups() {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    pageSize: 10,
+    totalPages: 1,
+    totalCount: 0,
+    hasNextPage: false,
+    hasPreviousPage: false
+  });
 
   usePageTitle('Learning Pathways');
 
   React.useEffect(() => {
     loadGroups();
-  }, []);
+  }, [page, pageSize]);
 
-  const loadGroups = async (search = '') => {
+  const loadGroups = async (search = query) => {
     setLoading(true);
     try {
-      const items = await listUserGroups(search);
-      setGroups(items);
+      const result = await listUserGroups({ search, page, pageSize });
+      setGroups(result.items || []);
+      setPagination(result.pagination || pagination);
     } catch (e) {
       console.error(e);
       toast.error('Failed to load learning pathways');
@@ -30,11 +42,20 @@ export default function AdminUserGroups() {
     }
   };
 
-  const filtered = useMemo(() => {
-    if (!query.trim()) return groups;
-    const q = query.toLowerCase();
-    return groups.filter((g) => g.name.toLowerCase().includes(q) || (g.description || '').toLowerCase().includes(q));
-  }, [groups, query]);
+  const handleSearch = (searchQuery) => {
+    setQuery(searchQuery);
+    setPage(1); // Reset to first page on search
+    loadGroups(searchQuery);
+  };
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (newPageSize) => {
+    setPageSize(newPageSize);
+    setPage(1); // Reset to first page when changing page size
+  };
 
   const onEdit = (id) => navigate(`/admin/learning-pathways/${id}/edit`);
   const onCreate = () => navigate('/admin/learning-pathways/new');
@@ -68,7 +89,7 @@ export default function AdminUserGroups() {
             <div className="relative">
               <input
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => handleSearch(e.target.value)}
                 placeholder="Search learning pathways"
                 className="w-full border border-gray-300 rounded px-4 py-2"
               />
@@ -92,12 +113,12 @@ export default function AdminUserGroups() {
                   <tr>
                     <td colSpan={5} className="px-6 py-8 text-center text-gray-500">Loading...</td>
                   </tr>
-                ) : filtered.length === 0 ? (
+                ) : groups.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No learning pathways found.</td>
                   </tr>
                 ) : (
-                  filtered.map((g) => (
+                  groups.map((g) => (
                     <tr key={g.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-900">{g.name}</div>
@@ -118,6 +139,15 @@ export default function AdminUserGroups() {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalCount={pagination.totalCount}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
         </div>
       </div>
     </div>

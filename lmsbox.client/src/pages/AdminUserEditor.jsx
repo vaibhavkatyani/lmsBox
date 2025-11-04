@@ -80,8 +80,8 @@ export default function AdminUserEditor() {
     setGroupPickerOpen(true);
     setGroupLoading(true);
     try {
-      const items = await listUserGroups('');
-      setGroupOptions(items);
+      const result = await listUserGroups({ search: '' });
+      setGroupOptions(result.items || []);
     } catch (e) {
       console.error(e);
       setGroupOptions([]);
@@ -94,8 +94,8 @@ export default function AdminUserEditor() {
     setGroupSearch(term);
     setGroupLoading(true);
     try {
-      const items = await listUserGroups(term);
-      setGroupOptions(items);
+      const result = await listUserGroups({ search: term });
+      setGroupOptions(result.items || []);
     } catch (e) {
       console.error(e);
       setGroupOptions([]);

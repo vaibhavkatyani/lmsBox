@@ -2,20 +2,54 @@ import api from '../utils/api';
 
 // Users service: manage users, group assignments
 // Backend endpoints:
-// GET /api/admin/users?search=... -> { items: [{ id, firstName, lastName, email, groupCount, status }] }
+// GET /api/admin/users?page=1&pageSize=20&search=...&status=...&sortBy=...&sortOrder=... -> { items: [...], pagination: {...} }
 // GET /api/admin/users/:id -> { id, firstName, lastName, email, groupIds: [], role, status }
 // POST /api/admin/users -> { id }
 // PUT /api/admin/users/:id -> success
 // DELETE /api/admin/users/:id -> success
 
-export async function listUsers(search = '') {
-  const q = (search || '').trim();
-  const url = `/api/admin/users${q ? `?search=${encodeURIComponent(q)}` : ''}`;
+export async function listUsers(params = {}) {
+  const { page = 1, pageSize = 20, search = '', status, sortBy, sortOrder } = params;
+  
+  const queryParams = new URLSearchParams({
+    page: page.toString(),
+    pageSize: pageSize.toString(),
+  });
+  
+  if (search?.trim()) {
+    queryParams.append('search', search.trim());
+  }
+  
+  if (status) {
+    queryParams.append('status', status);
+  }
+  
+  if (sortBy) {
+    queryParams.append('sortBy', sortBy);
+  }
+  
+  if (sortOrder) {
+    queryParams.append('sortOrder', sortOrder);
+  }
+  
+  const url = `/api/admin/users?${queryParams.toString()}`;
+  
   try {
     const response = await api.get(url);
     const data = response.data;
-    const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
-    return items;
+    
+    // Return both items and pagination metadata
+    return {
+      items: Array.isArray(data?.items) ? data.items : [],
+      pagination: data?.pagination || {
+        currentPage: page,
+        totalPages: 1,
+        pageSize: pageSize,
+        totalCount: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    };
   } catch (error) {
     console.error('Failed to fetch users:', error);
     

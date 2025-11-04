@@ -23,13 +23,20 @@ public class AdminLearningPathwaysController : ControllerBase
     public async Task<ActionResult<IEnumerable<object>>> GetLearningPathways(
         [FromQuery] string? search = null,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10)
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string sortBy = "name",
+        [FromQuery] string sortOrder = "asc")
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
         {
             return Unauthorized();
         }
+
+        // Validate pagination parameters
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 10;
+        if (pageSize > 100) pageSize = 100;
 
         var query = _context.LearningGroups
             .Include(lg => lg.Organisation)
@@ -39,43 +46,75 @@ public class AdminLearningPathwaysController : ControllerBase
                 .ThenInclude(gc => gc.Course)
             .AsQueryable();
 
+        // Search filter
         if (!string.IsNullOrEmpty(search))
         {
-            query = query.Where(lg => lg.Name.Contains(search) || 
-                                     (lg.Description != null && lg.Description.Contains(search)));
+            var searchLower = search.ToLower();
+            query = query.Where(lg => 
+                lg.Name.ToLower().Contains(searchLower) || 
+                (lg.Description != null && lg.Description.ToLower().Contains(searchLower)));
         }
 
+        // Get total count before pagination
         var totalCount = await query.CountAsync();
         
+        // Apply sorting
+        var sortByLower = sortBy.ToLower();
+        var sortOrderLower = sortOrder.ToLower();
+
+        query = sortByLower switch
+        {
+            "name" => sortOrderLower == "desc" 
+                ? query.OrderByDescending(lg => lg.Name) 
+                : query.OrderBy(lg => lg.Name),
+            "createdat" => sortOrderLower == "desc" 
+                ? query.OrderByDescending(lg => lg.CreatedAt) 
+                : query.OrderBy(lg => lg.CreatedAt),
+            "membercount" => sortOrderLower == "desc" 
+                ? query.OrderByDescending(lg => lg.LearnerGroups.Count(l => l.IsActive)) 
+                : query.OrderBy(lg => lg.LearnerGroups.Count(l => l.IsActive)),
+            "coursecount" => sortOrderLower == "desc" 
+                ? query.OrderByDescending(lg => lg.GroupCourses.Count()) 
+                : query.OrderBy(lg => lg.GroupCourses.Count()),
+            _ => query.OrderBy(lg => lg.Name)
+        };
+
+        // Apply pagination
         var pathways = await query
-            .OrderBy(lg => lg.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(lg => new
             {
-                lg.Id,
-                lg.Name,
-                lg.Description,
-                lg.CreatedAt,
-                CreatedBy = lg.CreatedByUser!.UserName,
-                MemberCount = lg.LearnerGroups.Count(learner => learner.IsActive),
-                CourseCount = lg.GroupCourses.Count(),
-                Courses = lg.GroupCourses.Select(gc => new
+                id = lg.Id,
+                name = lg.Name,
+                description = lg.Description,
+                createdAt = lg.CreatedAt,
+                createdBy = lg.CreatedByUser!.UserName,
+                memberCount = lg.LearnerGroups.Count(learner => learner.IsActive),
+                courseCount = lg.GroupCourses.Count(),
+                courses = lg.GroupCourses.Select(gc => new
                 {
-                    gc.Course!.Id,
-                    gc.Course.Title,
-                    gc.AssignedAt
+                    id = gc.Course!.Id,
+                    title = gc.Course.Title,
+                    assignedAt = gc.AssignedAt
                 }).ToList()
             })
             .ToListAsync();
 
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
         return Ok(new
         {
             items = pathways,
-            totalCount,
-            page,
-            pageSize,
-            totalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+            pagination = new
+            {
+                currentPage = page,
+                pageSize,
+                totalPages,
+                totalCount,
+                hasNextPage = page < totalPages,
+                hasPreviousPage = page > 1
+            }
         });
     }
 

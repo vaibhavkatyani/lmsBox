@@ -36,12 +36,25 @@ namespace lmsBox.Server.Controllers
 
         // GET /api/admin/users
         [HttpGet]
-        public async Task<IActionResult> GetUsers([FromQuery] string? search = null)
+        public async Task<IActionResult> GetUsers(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? search = null,
+            [FromQuery] string? role = null,
+            [FromQuery] string? status = null,
+            [FromQuery] string sortBy = "lastName",
+            [FromQuery] string sortOrder = "asc")
         {
             try
             {
+                // Validate pagination parameters
+                if (page < 1) page = 1;
+                if (pageSize < 1) pageSize = 20;
+                if (pageSize > 100) pageSize = 100; // Max page size limit
+
                 var query = _context.Users.AsQueryable();
 
+                // Apply search filter
                 if (!string.IsNullOrWhiteSpace(search))
                 {
                     var searchTerm = search.ToLower();
@@ -51,7 +64,40 @@ namespace lmsBox.Server.Controllers
                         (u.Email != null && u.Email.ToLower().Contains(searchTerm)));
                 }
 
+                // Apply status filter
+                if (!string.IsNullOrWhiteSpace(status))
+                {
+                    if (status.ToLower() == "active")
+                        query = query.Where(u => u.EmailConfirmed);
+                    else if (status.ToLower() == "pending")
+                        query = query.Where(u => !u.EmailConfirmed);
+                }
+
+                // Get total count before pagination
+                var totalCount = await query.CountAsync();
+
+                // Apply sorting
+                query = sortBy.ToLower() switch
+                {
+                    "firstname" => sortOrder.ToLower() == "desc" 
+                        ? query.OrderByDescending(u => u.FirstName) 
+                        : query.OrderBy(u => u.FirstName),
+                    "lastname" => sortOrder.ToLower() == "desc" 
+                        ? query.OrderByDescending(u => u.LastName) 
+                        : query.OrderBy(u => u.LastName),
+                    "email" => sortOrder.ToLower() == "desc" 
+                        ? query.OrderByDescending(u => u.Email) 
+                        : query.OrderBy(u => u.Email),
+                    "createdon" => sortOrder.ToLower() == "desc" 
+                        ? query.OrderByDescending(u => u.CreatedOn) 
+                        : query.OrderBy(u => u.CreatedOn),
+                    _ => query.OrderBy(u => u.LastName).ThenBy(u => u.FirstName)
+                };
+
+                // Apply pagination
                 var users = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
                     .Select(u => new
                     {
                         id = u.Id,
@@ -62,32 +108,53 @@ namespace lmsBox.Server.Controllers
                         joinedDate = u.CreatedOn.ToString("yyyy-MM-dd"),
                         role = "Learner" // Default, will be updated with actual roles
                     })
-                    .OrderBy(u => u.lastName)
-                    .ThenBy(u => u.firstName)
                     .ToListAsync();
 
-                // Get roles for each user (this could be optimized with a join if needed)
+                // Get roles for each user (optimized with batch processing)
+                var userIds = users.Select(u => u.id).ToList();
+                var appUsers = await _userManager.Users.Where(u => userIds.Contains(u.Id)).ToListAsync();
+                
                 var usersWithRoles = new List<object>();
                 foreach (var user in users)
                 {
-                    var appUser = await _userManager.FindByIdAsync(user.id);
+                    var appUser = appUsers.FirstOrDefault(au => au.Id == user.id);
                     var roles = appUser != null ? await _userManager.GetRolesAsync(appUser) : new List<string>();
                     var primaryRole = roles.FirstOrDefault() ?? "Learner";
+
+                    // Apply role filter if specified
+                    if (!string.IsNullOrWhiteSpace(role) && !roles.Any(r => r.Equals(role, StringComparison.OrdinalIgnoreCase)))
+                        continue;
 
                     usersWithRoles.Add(new
                     {
                         user.id,
                         user.firstName,
                         user.lastName,
+                        name = $"{user.firstName} {user.lastName}".Trim(),
                         user.email,
                         user.status,
                         user.joinedDate,
                         role = primaryRole,
+                        roles = roles.ToList(),
                         groupNames = new List<string>() // TODO: Implement group lookup if needed
                     });
                 }
 
-                return Ok(new { items = usersWithRoles });
+                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+                return Ok(new
+                {
+                    items = usersWithRoles,
+                    pagination = new
+                    {
+                        currentPage = page,
+                        pageSize,
+                        totalPages,
+                        totalCount,
+                        hasNextPage = page < totalPages,
+                        hasPreviousPage = page > 1
+                    }
+                });
             }
             catch (Exception ex)
             {

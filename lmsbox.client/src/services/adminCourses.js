@@ -4,13 +4,25 @@ import api from '../utils/api';
 export const adminCourseService = {
   // Get courses for admin management
   async listCourses(params = {}) {
-    const { search, status, category, sort } = params;
+    const { 
+      page = 1, 
+      pageSize = 20, 
+      search, 
+      status, 
+      category, 
+      sortBy = 'updatedAt', 
+      sortOrder = 'desc' 
+    } = params;
+    
     const queryParams = new URLSearchParams();
     
+    queryParams.append('page', page);
+    queryParams.append('pageSize', pageSize);
     if (search) queryParams.append('search', search);
     if (status && status !== 'all') queryParams.append('status', status);
     if (category && category !== 'all') queryParams.append('category', category);
-    if (sort) queryParams.append('sort', sort);
+    if (sortBy) queryParams.append('sortBy', sortBy);
+    if (sortOrder) queryParams.append('sortOrder', sortOrder);
 
     const response = await api.get(`/api/admin/courses?${queryParams.toString()}`);
     return response.data;
