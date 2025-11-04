@@ -223,6 +223,29 @@ namespace lmsBox.Server.Controllers
             _context.Quizzes.Add(quiz);
             await _context.SaveChangesAsync();
 
+            // Automatically create a lesson entry for this quiz
+            // Get the next ordinal number for lessons in this course
+            var maxOrdinal = await _context.Lessons
+                .Where(l => l.CourseId == request.CourseId)
+                .Select(l => (int?)l.Ordinal)
+                .MaxAsync() ?? 0;
+
+            var quizLesson = new Lesson
+            {
+                CourseId = request.CourseId,
+                Title = request.Title,
+                Content = request.Description,
+                Type = "quiz",
+                QuizId = quizId,
+                Ordinal = maxOrdinal + 1,
+                IsOptional = false,
+                CreatedByUserId = user.Id,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Lessons.Add(quizLesson);
+            await _context.SaveChangesAsync();
+
             return CreatedAtAction(nameof(GetQuiz), new { id = quizId }, new { id = quizId });
         }
 
@@ -253,6 +276,16 @@ namespace lmsBox.Server.Controllers
                 {
                     return BadRequest(new { message = "Course not found" });
                 }
+                
+                // Update the lesson's course if quiz is moved to a different course
+                var quizLesson = await _context.Lessons
+                    .FirstOrDefaultAsync(l => l.QuizId == id);
+                
+                if (quizLesson != null)
+                {
+                    quizLesson.CourseId = request.CourseId;
+                }
+                
                 quiz.CourseId = request.CourseId;
             }
 
@@ -267,6 +300,16 @@ namespace lmsBox.Server.Controllers
             quiz.AllowRetake = request.AllowRetake;
             quiz.MaxAttempts = request.MaxAttempts;
             quiz.UpdatedAt = DateTime.UtcNow;
+
+            // Update the corresponding lesson
+            var lesson = await _context.Lessons
+                .FirstOrDefaultAsync(l => l.QuizId == id);
+            
+            if (lesson != null)
+            {
+                lesson.Title = request.Title;
+                lesson.Content = request.Description;
+            }
 
             // Update questions - for simplicity, remove all and re-add
             _context.QuizQuestions.RemoveRange(quiz.Questions);
@@ -321,6 +364,15 @@ namespace lmsBox.Server.Controllers
             if (quiz == null)
             {
                 return NotFound(new { message = "Quiz not found" });
+            }
+
+            // Also delete the corresponding lesson
+            var quizLesson = await _context.Lessons
+                .FirstOrDefaultAsync(l => l.QuizId == id);
+            
+            if (quizLesson != null)
+            {
+                _context.Lessons.Remove(quizLesson);
             }
 
             _context.Quizzes.Remove(quiz);

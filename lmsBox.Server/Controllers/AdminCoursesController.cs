@@ -230,13 +230,13 @@ public class AdminCoursesController : ControllerBase
                 {
                     Id = l.Id,
                     Order = l.Ordinal,
-                    Type = "content", // Default type since Lesson model doesn't have Type
+                    Type = l.Type,
                     Title = l.Title,
                     Description = l.Content,
-                    IsOptional = false, // Default value
-                    Src = null, // Not in current model
-                    EntryUrl = null, // Not in current model
-                    QuizId = null // Not in current model
+                    IsOptional = l.IsOptional,
+                    Src = l.VideoUrl ?? l.DocumentUrl ?? l.ScormUrl,
+                    EntryUrl = l.ScormEntryUrl,
+                    QuizId = l.QuizId
                 }).ToList()
             };
 
@@ -362,6 +362,7 @@ public class AdminCoursesController : ControllerBase
 
             var course = await _context.Courses
                 .Include(c => c.Organisation)
+                .Include(c => c.Lessons)
                 .FirstOrDefaultAsync(c => c.Id == courseId);
 
             if (course == null)
@@ -391,6 +392,73 @@ public class AdminCoursesController : ControllerBase
             course.CertificateEnabled = request.CertificateEnabled;
             course.BannerUrl = request.BannerUrl;
             course.UpdatedAt = DateTime.UtcNow;
+
+            // Update lessons if provided
+            if (request.Lessons != null)
+            {
+                // Get existing lesson IDs
+                var existingLessonIds = course.Lessons.Select(l => l.Id).ToList();
+                var requestLessonIds = request.Lessons
+                    .Where(l => l.Id.HasValue)
+                    .Select(l => l.Id!.Value)
+                    .ToList();
+
+                // Remove lessons that are not in the request
+                var lessonsToRemove = course.Lessons
+                    .Where(l => !requestLessonIds.Contains(l.Id))
+                    .ToList();
+
+                foreach (var lesson in lessonsToRemove)
+                {
+                    _context.Lessons.Remove(lesson);
+                }
+
+                // Update existing lessons and add new ones
+                foreach (var lessonDto in request.Lessons)
+                {
+                    if (lessonDto.Id.HasValue)
+                    {
+                        // Update existing lesson
+                        var existingLesson = course.Lessons.FirstOrDefault(l => l.Id == lessonDto.Id.Value);
+                        if (existingLesson != null)
+                        {
+                            existingLesson.Title = lessonDto.Title;
+                            existingLesson.Content = lessonDto.Content;
+                            existingLesson.Ordinal = lessonDto.Ordinal;
+                            existingLesson.Type = lessonDto.Type;
+                            existingLesson.QuizId = lessonDto.QuizId;
+                            existingLesson.VideoUrl = lessonDto.VideoUrl;
+                            existingLesson.VideoDurationSeconds = lessonDto.VideoDurationSeconds;
+                            existingLesson.ScormUrl = lessonDto.ScormUrl;
+                            existingLesson.ScormEntryUrl = lessonDto.ScormEntryUrl;
+                            existingLesson.DocumentUrl = lessonDto.DocumentUrl;
+                            existingLesson.IsOptional = lessonDto.IsOptional;
+                        }
+                    }
+                    else
+                    {
+                        // Add new lesson
+                        var newLesson = new Lesson
+                        {
+                            CourseId = courseId,
+                            Title = lessonDto.Title,
+                            Content = lessonDto.Content,
+                            Ordinal = lessonDto.Ordinal,
+                            Type = lessonDto.Type,
+                            QuizId = lessonDto.QuizId,
+                            VideoUrl = lessonDto.VideoUrl,
+                            VideoDurationSeconds = lessonDto.VideoDurationSeconds,
+                            ScormUrl = lessonDto.ScormUrl,
+                            ScormEntryUrl = lessonDto.ScormEntryUrl,
+                            DocumentUrl = lessonDto.DocumentUrl,
+                            IsOptional = lessonDto.IsOptional,
+                            CreatedByUserId = userId,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.Lessons.Add(newLesson);
+                    }
+                }
+            }
 
             await _context.SaveChangesAsync();
 
@@ -422,13 +490,13 @@ public class AdminCoursesController : ControllerBase
                 {
                     Id = l.Id,
                     Order = l.Ordinal,
-                    Type = "content", // Default type since Lesson model doesn't have Type
+                    Type = l.Type,
                     Title = l.Title,
                     Description = l.Content,
-                    IsOptional = false, // Default value
-                    Src = null, // Not in current model
-                    EntryUrl = null, // Not in current model
-                    QuizId = null // Not in current model
+                    IsOptional = l.IsOptional,
+                    Src = l.VideoUrl ?? l.DocumentUrl ?? l.ScormUrl,
+                    EntryUrl = l.ScormEntryUrl,
+                    QuizId = l.QuizId
                 }).ToList()
             };
 
@@ -546,7 +614,7 @@ public class AdminLessonDto
     public bool IsOptional { get; set; }
     public string? Src { get; set; }
     public string? EntryUrl { get; set; }
-    public long? QuizId { get; set; }
+    public string? QuizId { get; set; }
 }
 
 // DTOs for API requests
@@ -564,4 +632,21 @@ public class CreateCourseRequest
 public class UpdateCourseRequest : CreateCourseRequest
 {
     public string? Status { get; set; }
+    public List<UpdateLessonDto>? Lessons { get; set; }
+}
+
+public class UpdateLessonDto
+{
+    public long? Id { get; set; } // null for new lessons
+    public string Title { get; set; } = null!;
+    public string? Content { get; set; }
+    public int Ordinal { get; set; }
+    public string Type { get; set; } = "content"; // content, video, quiz, scorm, document
+    public string? QuizId { get; set; }
+    public string? VideoUrl { get; set; }
+    public int? VideoDurationSeconds { get; set; }
+    public string? ScormUrl { get; set; }
+    public string? ScormEntryUrl { get; set; }
+    public string? DocumentUrl { get; set; }
+    public bool IsOptional { get; set; }
 }

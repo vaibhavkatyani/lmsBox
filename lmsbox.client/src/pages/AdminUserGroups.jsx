@@ -110,9 +110,15 @@ export default function AdminUserGroups() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">Loading...</td>
-                  </tr>
+                  Array.from({ length: 3 }).map((_, idx) => (
+                    <tr key={idx} className="animate-pulse">
+                      {Array.from({ length: 5 }).map((_, colIdx) => (
+                        <td key={colIdx} className="px-6 py-4">
+                          <div className="h-4 bg-gray-200 rounded w-full"></div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))
                 ) : groups.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No learning pathways found.</td>

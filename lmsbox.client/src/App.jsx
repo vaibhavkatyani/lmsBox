@@ -15,6 +15,9 @@ import AdminUserGroups from './pages/AdminUserGroups';
 import AdminUserGroupEditor from './pages/AdminUserGroupEditor';
 import AdminUserEditor from './pages/AdminUserEditor';
 import QuizCreator from './pages/QuizCreator';
+import UserActivityReport from './pages/UserActivityReport';
+import UserProgressReport from './pages/UserProgressReport';
+import CourseEnrollmentReport from './pages/CourseEnrollmentReport';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -119,6 +122,30 @@ function App() {
             element={
               <AdminRoute>
                 <AdminReports />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/user-activity"
+            element={
+              <AdminRoute>
+                <UserActivityReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/user-progress"
+            element={
+              <AdminRoute>
+                <UserProgressReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/course-enrollment"
+            element={
+              <AdminRoute>
+                <CourseEnrollmentReport />
               </AdminRoute>
             }
           />

@@ -208,9 +208,15 @@ export default function AdminCourses() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading courses...</td>
-                  </tr>
+                  Array.from({ length: 3 }).map((_, idx) => (
+                    <tr key={idx} className="animate-pulse">
+                      {Array.from({ length: 6 }).map((_, colIdx) => (
+                        <td key={colIdx} className="px-6 py-4">
+                          <div className="h-4 bg-gray-200 rounded w-full"></div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No courses found.</td>

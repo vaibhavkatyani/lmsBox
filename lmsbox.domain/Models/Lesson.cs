@@ -17,6 +17,28 @@ public class Lesson
 
     public int Ordinal { get; set; }
 
+    // Lesson Type: content, video, quiz, scorm, document
+    public string Type { get; set; } = "content";
+
+    // For quiz type lessons
+    public string? QuizId { get; set; }
+    [ForeignKey(nameof(QuizId))]
+    public Quiz? Quiz { get; set; }
+
+    // For video lessons
+    public string? VideoUrl { get; set; }
+    public int? VideoDurationSeconds { get; set; }
+
+    // For SCORM lessons
+    public string? ScormUrl { get; set; }
+    public string? ScormEntryUrl { get; set; }
+
+    // For document lessons
+    public string? DocumentUrl { get; set; }
+
+    // Optional flag
+    public bool IsOptional { get; set; } = false;
+
     // Who created the lesson (organisation admin)
     public string CreatedByUserId { get; set; } = null!;
     [ForeignKey(nameof(CreatedByUserId))]
