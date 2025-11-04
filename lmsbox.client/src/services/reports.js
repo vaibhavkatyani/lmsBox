@@ -47,32 +47,69 @@ export async function getCourseCompletionReport(params = {}) {
   return res.data;
 }
 
-export async function getLessonAnalyticsReport(courseId) {
-  const queryParams = courseId ? `?courseId=${courseId}` : '';
-  const res = await api.get(`/api/admin/reports/lesson-analytics${queryParams}`);
+export async function getLessonAnalyticsReport(params = {}) {
+  const { courseId, lessonType, startDate, endDate } = params;
+  const queryParams = new URLSearchParams();
+  
+  if (courseId) queryParams.append('courseId', courseId);
+  if (lessonType) queryParams.append('lessonType', lessonType);
+  if (startDate) queryParams.append('startDate', startDate);
+  if (endDate) queryParams.append('endDate', endDate);
+  
+  const res = await api.get(`/api/admin/reports/lesson-analytics?${queryParams}`);
   return res.data;
 }
 
 // Learning Pathway Reports
-export async function getPathwayProgressReport(params = {}) {
-  const { startDate, endDate } = params;
+export async function getPathwayProgressReport(startDate, endDate, activeOnly) {
   const queryParams = new URLSearchParams();
   
   if (startDate) queryParams.append('startDate', startDate);
   if (endDate) queryParams.append('endDate', endDate);
+  if (activeOnly !== undefined) queryParams.append('activeOnly', activeOnly);
   
   const res = await api.get(`/api/admin/reports/pathway-progress?${queryParams}`);
   return res.data;
 }
 
-export async function getPathwayAssignmentsReport() {
-  const res = await api.get('/api/admin/reports/pathway-assignments');
+export async function getPathwayAssignmentsReport(pathwayId, activeOnly) {
+  const queryParams = new URLSearchParams();
+  
+  if (pathwayId) queryParams.append('pathwayId', pathwayId);
+  if (activeOnly !== undefined) queryParams.append('activeOnly', activeOnly);
+  
+  const res = await api.get(`/api/admin/reports/pathway-assignments?${queryParams}`);
+  return res.data;
+}
+
+export async function getUserCourseProgressReport(search, courseId, status, startDate, endDate) {
+  const queryParams = new URLSearchParams();
+  
+  if (search) queryParams.append('search', search);
+  if (courseId) queryParams.append('courseId', courseId);
+  if (status) queryParams.append('status', status);
+  if (startDate) queryParams.append('startDate', startDate);
+  if (endDate) queryParams.append('endDate', endDate);
+  
+  const res = await api.get(`/api/admin/reports/user-course-progress?${queryParams}`);
   return res.data;
 }
 
 // Administrative Reports
-export async function getContentUsageReport() {
-  const res = await api.get('/api/admin/reports/content-usage');
+export async function getContentUsageReport(params = {}) {
+  const { category, startDate, endDate } = params;
+  const queryParams = new URLSearchParams();
+  
+  if (category) queryParams.append('category', category);
+  if (startDate) queryParams.append('startDate', startDate);
+  if (endDate) queryParams.append('endDate', endDate);
+  
+  const res = await api.get(`/api/admin/reports/content-usage?${queryParams}`);
+  return res.data;
+}
+
+export async function generateCustomReport(reportConfig) {
+  const res = await api.post('/api/admin/reports/custom-report', reportConfig);
   return res.data;
 }
 

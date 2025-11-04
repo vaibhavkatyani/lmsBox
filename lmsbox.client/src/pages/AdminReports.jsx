@@ -90,6 +90,15 @@ export default function AdminReports() {
       color: 'bg-cyan-500'
     },
     {
+      id: 'user-course-progress',
+      name: 'User-Course Progress Report',
+      description: 'Comprehensive view of all users and their course progress with detailed filtering',
+      category: 'admin',
+      icon: DocumentChartBarIcon,
+      path: '/admin/reports/user-course-progress',
+      color: 'bg-purple-500'
+    },
+    {
       id: 'content-usage',
       name: 'Content Usage Report',
       description: 'Track overall platform usage including courses, pathways, and groups',

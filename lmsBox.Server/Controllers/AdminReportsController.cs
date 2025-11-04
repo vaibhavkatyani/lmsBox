@@ -374,10 +374,19 @@ public class AdminReportsController : ControllerBase
             var courses = await coursesQuery.ToListAsync();
             var courseIds = courses.Select(c => c.Id).ToList();
 
-            // Get completion data
-            var completionData = await _context.LearnerProgresses
+            // Get all learner progress records
+            var allProgress = await _context.LearnerProgresses
                 .AsNoTracking()
-                .Where(lp => courseIds.Contains(lp.CourseId!))
+                .Where(lp => courseIds.Contains(lp.CourseId!) && lp.LessonId == null)
+                .ToListAsync();
+
+            // Filter by date range
+            var dateFilteredProgress = allProgress
+                .Where(lp => !lp.CompletedAt.HasValue || (lp.CompletedAt >= start && lp.CompletedAt <= end))
+                .ToList();
+
+            // Group and calculate in memory
+            var completionData = dateFilteredProgress
                 .GroupBy(lp => lp.CourseId)
                 .Select(g => new
                 {
@@ -385,13 +394,11 @@ public class AdminReportsController : ControllerBase
                     totalEnrollments = g.Count(),
                     completedCount = g.Count(lp => lp.Completed),
                     incompleteCount = g.Count(lp => !lp.Completed),
-                    avgCompletionTime = g
-                        .Where(lp => lp.Completed && lp.CompletedAt.HasValue)
-                        .Select(lp => (lp.CompletedAt!.Value - DateTime.UtcNow).Days)
-                        .DefaultIfEmpty(0)
-                        .Average()
+                    inProgressCount = g.Count(lp => !lp.Completed && lp.ProgressPercent > 0),
+                    notStartedCount = g.Count(lp => !lp.Completed && lp.ProgressPercent == 0),
+                    completedCourses = g.Where(lp => lp.Completed && lp.CompletedAt.HasValue).ToList()
                 })
-                .ToListAsync();
+                .ToList();
 
             var result = courses.Select(c =>
             {
@@ -401,41 +408,74 @@ public class AdminReportsController : ControllerBase
                     ? Math.Round((completion!.completedCount / (double)total) * 100, 2)
                     : 0;
 
+                // Calculate average completion time from completed courses
+                var avgCompletionTime = 0.0;
+                if (completion?.completedCourses != null && completion.completedCourses.Any())
+                {
+                    var completionTimes = completion.completedCourses
+                        .Where(cc => cc.CompletedAt.HasValue)
+                        .Select(cc => (cc.CompletedAt!.Value - c.CreatedAt).Days)
+                        .Where(days => days >= 0)
+                        .ToList();
+                    
+                    if (completionTimes.Any())
+                    {
+                        avgCompletionTime = Math.Round(completionTimes.Average(), 1);
+                    }
+                }
+
                 return new
                 {
                     courseId = c.Id,
                     courseTitle = c.Title,
                     category = c.Category,
+                    createdAt = c.CreatedAt,
                     totalEnrollments = total,
                     completedCount = completion?.completedCount ?? 0,
                     incompleteCount = completion?.incompleteCount ?? 0,
+                    inProgressCount = completion?.inProgressCount ?? 0,
+                    notStartedCount = completion?.notStartedCount ?? 0,
                     completionRate,
-                    averageCompletionTime = completion != null ? Math.Abs(Math.Round(completion.avgCompletionTime, 1)) : 0
+                    averageCompletionTime = avgCompletionTime,
+                    performance = completionRate >= 75 ? "Excellent" : completionRate >= 50 ? "Good" : completionRate >= 25 ? "Fair" : "Poor"
                 };
             }).OrderByDescending(c => c.completionRate).ToList();
 
             // Completion trends (last 30 days)
             var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
-            var completionTrends = await _context.LearnerProgresses
-                .AsNoTracking()
-                .Where(lp => courseIds.Contains(lp.CourseId!) &&
-                             lp.Completed &&
-                             lp.CompletedAt.HasValue &&
-                             lp.CompletedAt.Value >= thirtyDaysAgo)
+            var recentCompletions = allProgress
+                .Where(lp => lp.Completed && lp.CompletedAt.HasValue && lp.CompletedAt.Value >= thirtyDaysAgo)
                 .GroupBy(lp => lp.CompletedAt!.Value.Date)
                 .Select(g => new { date = g.Key.ToString("MMM dd"), count = g.Count() })
-                .ToListAsync();
+                .OrderBy(x => x.date)
+                .ToList();
+
+            // Category breakdown
+            var categoryBreakdown = result
+                .GroupBy(c => c.category ?? "Uncategorized")
+                .Select(g => new
+                {
+                    category = g.Key,
+                    courses = g.Count(),
+                    totalCompletions = g.Sum(c => c.completedCount),
+                    averageCompletionRate = Math.Round(g.Average(c => c.completionRate), 2)
+                })
+                .OrderByDescending(c => c.totalCompletions)
+                .ToList();
 
             var summary = new
             {
                 totalCourses = result.Count,
                 averageCompletionRate = result.Any() ? Math.Round(result.Average(c => c.completionRate), 2) : 0,
-                averageCompletionTime = result.Any() ? Math.Round(result.Average(c => c.averageCompletionTime), 2) : 0,
+                averageCompletionTime = result.Any() ? Math.Round(result.Where(c => c.averageCompletionTime > 0).Select(c => c.averageCompletionTime).DefaultIfEmpty(0).Average(), 2) : 0,
                 totalCompletions = result.Sum(c => c.completedCount),
-                totalIncomplete = result.Sum(c => c.incompleteCount)
+                totalIncomplete = result.Sum(c => c.incompleteCount),
+                totalInProgress = result.Sum(c => c.inProgressCount),
+                bestPerforming = result.FirstOrDefault()?.courseTitle ?? "N/A",
+                worstPerforming = result.LastOrDefault()?.courseTitle ?? "N/A"
             };
 
-            return Ok(new { courses = result, summary, completionTrends });
+            return Ok(new { courses = result, summary, completionTrends = recentCompletions, categoryBreakdown });
         }
         catch (Exception ex)
         {
@@ -449,7 +489,11 @@ public class AdminReportsController : ControllerBase
     #region Lesson Analytics Report
 
     [HttpGet("lesson-analytics")]
-    public async Task<IActionResult> GetLessonAnalyticsReport([FromQuery] string? courseId)
+    public async Task<IActionResult> GetLessonAnalyticsReport(
+        [FromQuery] string? courseId,
+        [FromQuery] string? lessonType,
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate)
     {
         try
         {
@@ -460,61 +504,141 @@ public class AdminReportsController : ControllerBase
             if (!string.IsNullOrEmpty(courseId))
                 lessonsQuery = lessonsQuery.Where(l => l.CourseId == courseId);
 
+            if (!string.IsNullOrEmpty(lessonType))
+                lessonsQuery = lessonsQuery.Where(l => l.Type == lessonType);
+
             if (orgId.HasValue)
-                lessonsQuery = lessonsQuery.Where(l => l.Course.OrganisationId == orgId);
+                lessonsQuery = lessonsQuery.Where(l => l.Course!.OrganisationId == orgId);
 
             var lessons = await lessonsQuery.Include(l => l.Course).ToListAsync();
             var lessonIds = lessons.Select(l => l.Id).ToList();
 
-            // Get lesson progress data
-            var lessonProgressData = await _context.LearnerProgresses
+            // Get all progress data for lessons
+            var allProgressQuery = _context.LearnerProgresses
                 .AsNoTracking()
-                .Where(lp => lp.LessonId.HasValue && lessonIds.Contains(lp.LessonId.Value))
-                .GroupBy(lp => lp.LessonId)
-                .Select(g => new
-                {
-                    lessonId = g.Key,
-                    totalAccesses = g.Count(),
-                    completions = g.Count(lp => lp.Completed),
-                    avgProgress = g.Average(lp => lp.ProgressPercent)
-                })
-                .ToListAsync();
+                .Where(lp => lp.CourseId != null && lessons.Select(l => l.CourseId).Contains(lp.CourseId));
 
+            // Apply date filters
+            if (startDate.HasValue)
+                allProgressQuery = allProgressQuery.Where(lp => lp.CompletedAt >= startDate.Value || lp.CompletedAt == null);
+            if (endDate.HasValue)
+                allProgressQuery = allProgressQuery.Where(lp => lp.CompletedAt <= endDate.Value || lp.CompletedAt == null);
+
+            var allProgress = await allProgressQuery.ToListAsync();
+
+            // Calculate metrics per lesson
             var result = lessons.Select(l =>
             {
-                var progress = lessonProgressData.FirstOrDefault(p => p.lessonId == l.Id);
-                var totalAccesses = progress?.totalAccesses ?? 0;
-                var completionRate = totalAccesses > 0
-                    ? Math.Round((progress!.completions / (double)totalAccesses) * 100, 2)
+                var lessonProgress = allProgress.Where(lp => lp.CourseId == l.CourseId).ToList();
+                var totalEnrollments = lessonProgress.Count;
+                var completions = lessonProgress.Count(lp => lp.Completed);
+                var inProgress = lessonProgress.Count(lp => !lp.Completed && lp.ProgressPercent > 0);
+                var notStarted = lessonProgress.Count(lp => lp.ProgressPercent == 0);
+                
+                var completionRate = totalEnrollments > 0
+                    ? Math.Round((completions / (double)totalEnrollments) * 100, 2)
                     : 0;
+
+                var avgProgress = lessonProgress.Any()
+                    ? Math.Round(lessonProgress.Average(lp => lp.ProgressPercent), 2)
+                    : 0;
+
+                // Calculate engagement level
+                string engagementLevel;
+                if (completionRate >= 75) engagementLevel = "High";
+                else if (completionRate >= 50) engagementLevel = "Medium";
+                else if (completionRate >= 25) engagementLevel = "Low";
+                else engagementLevel = "Very Low";
+
+                // Calculate difficulty based on completion rate and average progress
+                string difficulty;
+                if (completionRate >= 75 && avgProgress >= 80) difficulty = "Easy";
+                else if (completionRate >= 50 && avgProgress >= 60) difficulty = "Moderate";
+                else if (completionRate >= 25) difficulty = "Challenging";
+                else difficulty = "Very Challenging";
 
                 return new
                 {
                     lessonId = l.Id,
                     lessonTitle = l.Title,
-                    lessonType = l.Type,
-                    courseTitle = l.Course?.Title,
+                    lessonType = l.Type ?? "Unknown",
+                    courseTitle = l.Course?.Title ?? "N/A",
                     courseId = l.CourseId,
-                    totalAccesses,
-                    completions = progress?.completions ?? 0,
+                    order = l.Ordinal,
+                    duration = l.VideoDurationSeconds.HasValue ? Math.Round(l.VideoDurationSeconds.Value / 60.0, 1) : (double?)null,
+                    totalEnrollments,
+                    completions,
+                    inProgress,
+                    notStarted,
                     completionRate,
-                    averageProgress = progress != null ? Math.Round(progress.avgProgress, 2) : 0
+                    averageProgress = avgProgress,
+                    engagementLevel,
+                    difficulty,
+                    isPopular = totalEnrollments > 10 && completionRate >= 60
                 };
-            }).OrderByDescending(l => l.totalAccesses).ToList();
+            }).OrderBy(l => l.order).ToList();
+
+            // Group by lesson type
+            var typeBreakdown = result.GroupBy(l => l.lessonType)
+                .Select(g => new
+                {
+                    type = g.Key,
+                    count = g.Count(),
+                    totalEnrollments = g.Sum(l => l.totalEnrollments),
+                    averageCompletionRate = g.Any() ? Math.Round(g.Average(l => l.completionRate), 2) : 0,
+                    averageProgress = g.Any() ? Math.Round(g.Average(l => l.averageProgress), 2) : 0
+                })
+                .OrderByDescending(t => t.count)
+                .ToList();
+
+            // Group by engagement level
+            var engagementBreakdown = result.GroupBy(l => l.engagementLevel)
+                .Select(g => new
+                {
+                    level = g.Key,
+                    count = g.Count(),
+                    percentage = result.Count > 0 ? Math.Round((g.Count() / (double)result.Count) * 100, 2) : 0
+                })
+                .ToList();
+
+            // Group by difficulty
+            var difficultyBreakdown = result.GroupBy(l => l.difficulty)
+                .Select(g => new
+                {
+                    level = g.Key,
+                    count = g.Count(),
+                    percentage = result.Count > 0 ? Math.Round((g.Count() / (double)result.Count) * 100, 2) : 0
+                })
+                .ToList();
+
+            // Find popular and problematic lessons
+            var popularLessons = result.Where(l => l.isPopular).Take(5).ToList();
+            var problematicLessons = result.Where(l => l.completionRate < 25).OrderBy(l => l.completionRate).Take(5).ToList();
 
             var summary = new
             {
                 totalLessons = result.Count,
-                totalAccesses = result.Sum(l => l.totalAccesses),
+                totalEnrollments = result.Sum(l => l.totalEnrollments),
+                totalCompletions = result.Sum(l => l.completions),
                 averageCompletionRate = result.Any() ? Math.Round(result.Average(l => l.completionRate), 2) : 0,
-                mostAccessedLesson = result.FirstOrDefault()?.lessonTitle ?? "N/A",
-                leastAccessedLesson = result.LastOrDefault()?.lessonTitle ?? "N/A",
-                lessonsByType = result.GroupBy(l => l.lessonType)
-                    .Select(g => new { type = g.Key, count = g.Count() })
-                    .ToList()
+                averageProgress = result.Any() ? Math.Round(result.Average(l => l.averageProgress), 2) : 0,
+                mostPopularLesson = result.OrderByDescending(l => l.totalEnrollments).FirstOrDefault()?.lessonTitle ?? "N/A",
+                highestCompletionLesson = result.OrderByDescending(l => l.completionRate).FirstOrDefault()?.lessonTitle ?? "N/A",
+                lowestCompletionLesson = result.OrderBy(l => l.completionRate).FirstOrDefault()?.lessonTitle ?? "N/A",
+                popularLessonsCount = popularLessons.Count,
+                problematicLessonsCount = problematicLessons.Count
             };
 
-            return Ok(new { lessons = result, summary });
+            return Ok(new
+            {
+                lessons = result,
+                summary,
+                typeBreakdown,
+                engagementBreakdown,
+                difficultyBreakdown,
+                popularLessons,
+                problematicLessons
+            });
         }
         catch (Exception ex)
         {
@@ -530,72 +654,169 @@ public class AdminReportsController : ControllerBase
     [HttpGet("pathway-progress")]
     public async Task<IActionResult> GetPathwayProgressReport(
         [FromQuery] DateTime? startDate,
-        [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? endDate,
+        [FromQuery] bool? activeOnly)
     {
         try
         {
             var orgId = await GetOrgIdFilter();
-            var start = startDate ?? DateTime.UtcNow.AddMonths(-3);
-            var end = endDate ?? DateTime.UtcNow;
 
             var pathwaysQuery = _context.LearningPathways.AsNoTracking();
             if (orgId.HasValue)
                 pathwaysQuery = pathwaysQuery.Where(p => p.OrganisationId == orgId);
 
+            if (activeOnly == true)
+                pathwaysQuery = pathwaysQuery.Where(p => p.IsActive);
+
             var pathways = await pathwaysQuery.ToListAsync();
             var pathwayIds = pathways.Select(p => p.Id).ToList();
 
             // Get pathway progress data
-            var pathwayProgressData = await _context.LearnerPathwayProgresses
+            var progressQuery = _context.LearnerPathwayProgresses
                 .AsNoTracking()
-                .Where(lpp => pathwayIds.Contains(lpp.LearningPathwayId))
-                .GroupBy(lpp => lpp.LearningPathwayId)
-                .Select(g => new
-                {
-                    pathwayId = g.Key,
-                    totalEnrollments = g.Count(),
-                    completions = g.Count(lpp => lpp.IsCompleted),
-                    avgProgress = g.Average(lpp => (double?)lpp.ProgressPercent) ?? 0,
-                    avgCompletionTime = g
-                        .Where(lpp => lpp.IsCompleted && lpp.CompletedAt.HasValue)
-                        .Select(lpp => (lpp.CompletedAt!.Value - lpp.EnrolledAt).Days)
-                        .DefaultIfEmpty(0)
-                        .Average()
-                })
+                .Where(lpp => pathwayIds.Contains(lpp.LearningPathwayId));
+
+            // Apply date filters
+            if (startDate.HasValue)
+                progressQuery = progressQuery.Where(lpp => lpp.EnrolledAt >= startDate.Value);
+            if (endDate.HasValue)
+                progressQuery = progressQuery.Where(lpp => lpp.EnrolledAt <= endDate.Value);
+
+            var allProgress = await progressQuery.ToListAsync();
+
+            // Get pathway courses
+            var pathwayCourses = await _context.PathwayCourses
+                .AsNoTracking()
+                .Where(pc => pathwayIds.Contains(pc.LearningPathwayId))
                 .ToListAsync();
 
             var result = pathways.Select(p =>
             {
-                var progress = pathwayProgressData.FirstOrDefault(ppd => ppd.pathwayId == p.Id);
-                var totalEnrollments = progress?.totalEnrollments ?? 0;
+                var pathwayProgress = allProgress.Where(lpp => lpp.LearningPathwayId == p.Id).ToList();
+                var totalEnrollments = pathwayProgress.Count;
+                var completions = pathwayProgress.Count(lpp => lpp.IsCompleted);
+                var inProgress = pathwayProgress.Count(lpp => !lpp.IsCompleted && lpp.ProgressPercent > 0);
+                var notStarted = pathwayProgress.Count(lpp => lpp.ProgressPercent == 0);
+                
                 var completionRate = totalEnrollments > 0
-                    ? Math.Round((progress!.completions / (double)totalEnrollments) * 100, 2)
+                    ? Math.Round((completions / (double)totalEnrollments) * 100, 2)
                     : 0;
+
+                var avgProgress = pathwayProgress.Any()
+                    ? Math.Round(pathwayProgress.Average(lpp => lpp.ProgressPercent), 2)
+                    : 0;
+
+                // Calculate average completion time (in days)
+                var completedProgress = pathwayProgress.Where(lpp => lpp.IsCompleted && lpp.CompletedAt.HasValue).ToList();
+                var avgCompletionTime = completedProgress.Any()
+                    ? Math.Round(completedProgress.Average(lpp => (lpp.CompletedAt!.Value - lpp.EnrolledAt).TotalDays), 1)
+                    : 0;
+
+                // Get course count
+                var courseCount = pathwayCourses.Count(pc => pc.LearningPathwayId == p.Id);
+
+                // Calculate engagement level
+                string engagementLevel;
+                if (totalEnrollments > 50 && completionRate >= 60) engagementLevel = "Excellent";
+                else if (totalEnrollments > 20 && completionRate >= 40) engagementLevel = "Good";
+                else if (totalEnrollments > 0 && completionRate >= 20) engagementLevel = "Fair";
+                else if (totalEnrollments > 0) engagementLevel = "Poor";
+                else engagementLevel = "No Data";
+
+                // Recent enrollments (last 30 days)
+                var recentEnrollments = pathwayProgress.Count(lpp => lpp.EnrolledAt >= DateTime.UtcNow.AddDays(-30));
 
                 return new
                 {
                     pathwayId = p.Id,
                     pathwayTitle = p.Title,
+                    description = p.Description,
+                    isActive = p.IsActive,
+                    courseCount,
                     totalEnrollments,
-                    completions = progress?.completions ?? 0,
+                    completions,
+                    inProgress,
+                    notStarted,
                     completionRate,
-                    averageProgress = progress != null ? Math.Round(progress.avgProgress, 2) : 0,
-                    averageCompletionTime = progress != null ? Math.Round(progress.avgCompletionTime, 1) : 0,
-                    dropoutRate = totalEnrollments > 0 ? Math.Round(100 - completionRate, 2) : 0
+                    averageProgress = avgProgress,
+                    averageCompletionTime = avgCompletionTime,
+                    dropoutRate = totalEnrollments > 0 ? Math.Round(100 - completionRate, 2) : 0,
+                    engagementLevel,
+                    recentEnrollments,
+                    isPopular = totalEnrollments > 20 && completionRate >= 50
                 };
-            }).OrderByDescending(p => p.completionRate).ToList();
+            }).OrderByDescending(p => p.totalEnrollments).ToList();
+
+            // Engagement breakdown
+            var engagementBreakdown = result.GroupBy(p => p.engagementLevel)
+                .Select(g => new
+                {
+                    level = g.Key,
+                    count = g.Count(),
+                    percentage = result.Count > 0 ? Math.Round((g.Count() / (double)result.Count) * 100, 2) : 0
+                })
+                .ToList();
+
+            // Top pathways
+            var topPathways = result
+                .Where(p => p.totalEnrollments > 0)
+                .OrderByDescending(p => p.completionRate)
+                .Take(5)
+                .ToList();
+
+            // Struggling pathways
+            var strugglingPathways = result
+                .Where(p => p.totalEnrollments > 5 && p.completionRate < 30)
+                .OrderBy(p => p.completionRate)
+                .Take(5)
+                .ToList();
+
+            // Popular pathways
+            var popularPathways = result
+                .Where(p => p.isPopular)
+                .OrderByDescending(p => p.totalEnrollments)
+                .Take(5)
+                .ToList();
+
+            // Completion trends (group by month for last 6 months)
+            var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
+            var completionTrends = allProgress
+                .Where(lpp => lpp.IsCompleted && lpp.CompletedAt.HasValue && lpp.CompletedAt >= sixMonthsAgo)
+                .GroupBy(lpp => new { Year = lpp.CompletedAt!.Value.Year, Month = lpp.CompletedAt.Value.Month })
+                .Select(g => new
+                {
+                    month = $"{g.Key.Year}-{g.Key.Month:D2}",
+                    completions = g.Count()
+                })
+                .OrderBy(t => t.month)
+                .ToList();
 
             var summary = new
             {
                 totalPathways = result.Count,
-                averageCompletionRate = result.Any() ? Math.Round(result.Average(p => p.completionRate), 2) : 0,
-                averageCompletionTime = result.Any() ? Math.Round(result.Average(p => p.averageCompletionTime), 2) : 0,
-                mostSuccessfulPathway = result.FirstOrDefault()?.pathwayTitle ?? "N/A",
+                activePathways = result.Count(p => p.isActive),
                 totalEnrollments = result.Sum(p => p.totalEnrollments),
-                totalCompletions = result.Sum(p => p.completions)
+                totalCompletions = result.Sum(p => p.completions),
+                averageCompletionRate = result.Any() ? Math.Round(result.Average(p => p.completionRate), 2) : 0,
+                averageCompletionTime = result.Where(p => p.averageCompletionTime > 0).Any() 
+                    ? Math.Round(result.Where(p => p.averageCompletionTime > 0).Average(p => p.averageCompletionTime), 2) 
+                    : 0,
+                mostSuccessfulPathway = result.OrderByDescending(p => p.completionRate).FirstOrDefault()?.pathwayTitle ?? "N/A",
+                mostPopularPathway = result.OrderByDescending(p => p.totalEnrollments).FirstOrDefault()?.pathwayTitle ?? "N/A",
+                pathwaysWithNoEnrollments = result.Count(p => p.totalEnrollments == 0),
+                totalInProgress = result.Sum(p => p.inProgress)
             };
 
-            return Ok(new { pathways = result, summary });
+            return Ok(new
+            {
+                pathways = result,
+                summary,
+                engagementBreakdown,
+                topPathways,
+                strugglingPathways,
+                popularPathways,
+                completionTrends
+            });
         }
         catch (Exception ex)
         {
@@ -605,7 +826,9 @@ public class AdminReportsController : ControllerBase
     }
 
     [HttpGet("pathway-assignments")]
-    public async Task<IActionResult> GetPathwayAssignmentsReport()
+    public async Task<IActionResult> GetPathwayAssignmentsReport(
+        [FromQuery] string? pathwayId,
+        [FromQuery] bool? activeOnly)
     {
         try
         {
@@ -615,45 +838,122 @@ public class AdminReportsController : ControllerBase
             if (orgId.HasValue)
                 pathwaysQuery = pathwaysQuery.Where(p => p.OrganisationId == orgId);
 
+            if (activeOnly == true)
+                pathwaysQuery = pathwaysQuery.Where(p => p.IsActive);
+
+            if (!string.IsNullOrEmpty(pathwayId))
+                pathwaysQuery = pathwaysQuery.Where(p => p.Id == pathwayId);
+
             var pathways = await pathwaysQuery.ToListAsync();
             var pathwayIds = pathways.Select(p => p.Id).ToList();
 
-            // Get assignment data
-            var assignmentData = await _context.LearnerPathwayProgresses
+            // Get all progress records
+            var allProgress = await _context.LearnerPathwayProgresses
                 .AsNoTracking()
                 .Where(lpp => pathwayIds.Contains(lpp.LearningPathwayId))
-                .GroupBy(lpp => lpp.LearningPathwayId)
-                .Select(g => new
-                {
-                    pathwayId = g.Key,
-                    totalUsers = g.Select(lpp => lpp.UserId).Distinct().Count(),
-                    recentAssignments = g.Where(lpp => lpp.EnrolledAt >= DateTime.UtcNow.AddDays(-30)).Count()
-                })
+                .ToListAsync();
+
+            // Get user details
+            var userIds = allProgress.Select(lpp => lpp.UserId).Distinct().ToList();
+            var users = await _context.Users
+                .AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.FirstName, u.LastName, u.Email })
                 .ToListAsync();
 
             var result = pathways.Select(p =>
             {
-                var assignment = assignmentData.FirstOrDefault(ad => ad.pathwayId == p.Id);
+                var pathwayProgress = allProgress.Where(lpp => lpp.LearningPathwayId == p.Id).ToList();
+                var assignedUsers = pathwayProgress.Select(lpp => lpp.UserId).Distinct().Count();
+                var completed = pathwayProgress.Count(lpp => lpp.IsCompleted);
+                var inProgress = pathwayProgress.Count(lpp => !lpp.IsCompleted && lpp.ProgressPercent > 0);
+                var notStarted = pathwayProgress.Count(lpp => lpp.ProgressPercent == 0);
+                var recentAssignments = pathwayProgress.Count(lpp => lpp.EnrolledAt >= DateTime.UtcNow.AddDays(-30));
+
+                // Get user assignments for this pathway
+                var userAssignments = pathwayProgress.Select(lpp =>
+                {
+                    var user = users.FirstOrDefault(u => u.Id == lpp.UserId);
+                    return new
+                    {
+                        userId = lpp.UserId,
+                        userName = user != null ? $"{user.FirstName} {user.LastName}" : "Unknown User",
+                        email = user?.Email ?? "N/A",
+                        enrolledAt = lpp.EnrolledAt,
+                        progressPercent = lpp.ProgressPercent,
+                        isCompleted = lpp.IsCompleted,
+                        completedAt = lpp.CompletedAt,
+                        status = lpp.IsCompleted ? "Completed" : 
+                                lpp.ProgressPercent > 0 ? "In Progress" : "Not Started"
+                    };
+                }).OrderByDescending(ua => ua.enrolledAt).ToList();
 
                 return new
                 {
                     pathwayId = p.Id,
                     pathwayTitle = p.Title,
-                    totalUsers = assignment?.totalUsers ?? 0,
-                    recentAssignments = assignment?.recentAssignments ?? 0,
-                    isActive = p.IsActive
+                    description = p.Description,
+                    isActive = p.IsActive,
+                    assignedUsers,
+                    completed,
+                    inProgress,
+                    notStarted,
+                    recentAssignments,
+                    completionRate = assignedUsers > 0 
+                        ? Math.Round((completed / (double)assignedUsers) * 100, 2) 
+                        : 0,
+                    userAssignments
                 };
-            }).OrderByDescending(p => p.totalUsers).ToList();
+            }).OrderByDescending(p => p.assignedUsers).ToList();
+
+            // Assignment trends (last 6 months)
+            var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
+            var assignmentTrends = allProgress
+                .Where(lpp => lpp.EnrolledAt >= sixMonthsAgo)
+                .GroupBy(lpp => new { Year = lpp.EnrolledAt.Year, Month = lpp.EnrolledAt.Month })
+                .Select(g => new
+                {
+                    month = $"{g.Key.Year}-{g.Key.Month:D2}",
+                    assignments = g.Count()
+                })
+                .OrderBy(t => t.month)
+                .ToList();
+
+            // Top assigned pathways
+            var topAssigned = result
+                .Where(p => p.assignedUsers > 0)
+                .OrderByDescending(p => p.assignedUsers)
+                .Take(5)
+                .ToList();
+
+            // Pathways with no assignments
+            var unassignedPathways = result
+                .Where(p => p.assignedUsers == 0)
+                .Select(p => new { p.pathwayId, p.pathwayTitle, p.isActive })
+                .ToList();
 
             var summary = new
             {
                 totalPathways = result.Count,
-                totalAssignments = result.Sum(p => p.totalUsers),
+                activePathways = result.Count(p => p.isActive),
+                totalAssignments = result.Sum(p => p.assignedUsers),
+                totalCompleted = result.Sum(p => p.completed),
+                totalInProgress = result.Sum(p => p.inProgress),
+                totalNotStarted = result.Sum(p => p.notStarted),
                 recentAssignments = result.Sum(p => p.recentAssignments),
-                mostAssignedPathway = result.FirstOrDefault()?.pathwayTitle ?? "N/A"
+                averageCompletionRate = result.Any() ? Math.Round(result.Average(p => p.completionRate), 2) : 0,
+                mostAssignedPathway = result.OrderByDescending(p => p.assignedUsers).FirstOrDefault()?.pathwayTitle ?? "N/A",
+                unassignedPathwaysCount = unassignedPathways.Count
             };
 
-            return Ok(new { pathways = result, summary });
+            return Ok(new
+            {
+                pathways = result,
+                summary,
+                assignmentTrends,
+                topAssigned,
+                unassignedPathways
+            });
         }
         catch (Exception ex)
         {
@@ -664,10 +964,262 @@ public class AdminReportsController : ControllerBase
 
     #endregion
 
+    #region User-Course Progress Report
+
+    [HttpGet("user-course-progress")]
+    public async Task<IActionResult> GetUserCourseProgressReport(
+        [FromQuery] string? search,
+        [FromQuery] string? courseId,
+        [FromQuery] string? status,
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate)
+    {
+        try
+        {
+            var orgId = await GetOrgIdFilter();
+
+            // Get users
+            var usersQuery = _context.Users.AsNoTracking();
+            if (orgId.HasValue)
+                usersQuery = usersQuery.Where(u => u.OrganisationID == orgId);
+
+            var users = await usersQuery.ToListAsync();
+            var userIds = users.Select(u => u.Id).ToList();
+
+            // Get courses
+            var coursesQuery = _context.Courses.AsNoTracking();
+            if (orgId.HasValue)
+                coursesQuery = coursesQuery.Where(c => c.OrganisationId == orgId);
+
+            var courses = await coursesQuery.ToListAsync();
+            var courseIds = courses.Select(c => c.Id).ToList();
+
+            // Get all progress records
+            var progressQuery = _context.LearnerProgresses
+                .AsNoTracking()
+                .Where(lp => userIds.Contains(lp.UserId) && 
+                             courseIds.Contains(lp.CourseId!) && 
+                             lp.LessonId == null);
+
+            if (!string.IsNullOrEmpty(courseId))
+                progressQuery = progressQuery.Where(lp => lp.CourseId == courseId);
+
+            // Date filtering on CompletedAt for completed courses
+            if (startDate.HasValue && endDate.HasValue)
+                progressQuery = progressQuery.Where(lp => 
+                    !lp.Completed || 
+                    (lp.CompletedAt.HasValue && lp.CompletedAt >= startDate.Value && lp.CompletedAt <= endDate.Value));
+            else if (startDate.HasValue)
+                progressQuery = progressQuery.Where(lp => 
+                    !lp.Completed || 
+                    (lp.CompletedAt.HasValue && lp.CompletedAt >= startDate.Value));
+            else if (endDate.HasValue)
+                progressQuery = progressQuery.Where(lp => 
+                    !lp.Completed || 
+                    (lp.CompletedAt.HasValue && lp.CompletedAt <= endDate.Value));
+
+            var allProgress = await progressQuery.ToListAsync();
+
+            // Build detailed user-course progress data
+            var userCourseProgress = allProgress.Select(lp =>
+            {
+                var user = users.FirstOrDefault(u => u.Id == lp.UserId);
+                var course = courses.FirstOrDefault(c => c.Id == lp.CourseId);
+
+                var progressStatus = lp.Completed ? "Completed" :
+                                    lp.ProgressPercent > 0 ? "In Progress" : "Not Started";
+
+                // Calculate days to complete for completed courses only
+                var daysToComplete = lp.Completed && lp.CompletedAt.HasValue 
+                    ? (int?)(DateTime.UtcNow - lp.CompletedAt.Value).Days 
+                    : null;
+
+                // Use completion date or current date for enrollment reference
+                var referenceDate = lp.CompletedAt ?? DateTime.UtcNow;
+                var daysSinceReference = (DateTime.UtcNow - referenceDate).Days;
+
+                return new
+                {
+                    userId = lp.UserId,
+                    userName = user != null ? $"{user.FirstName} {user.LastName}" : "Unknown User",
+                    email = user?.Email ?? "N/A",
+                    courseId = lp.CourseId,
+                    courseTitle = course?.Title ?? "Unknown Course",
+                    courseCategory = course?.Category ?? "Uncategorized",
+                    progressPercent = lp.ProgressPercent,
+                    status = progressStatus,
+                    completed = lp.Completed,
+                    completedAt = lp.CompletedAt,
+                    daysToComplete,
+                    daysSinceReference,
+                    isStale = !lp.Completed && lp.ProgressPercent < 50,
+                    performance = lp.Completed && daysToComplete.HasValue
+                        ? (daysToComplete.Value <= 7 ? "Excellent" : 
+                           daysToComplete.Value <= 14 ? "Good" : 
+                           daysToComplete.Value <= 30 ? "Average" : "Slow")
+                        : "N/A"
+                };
+            }).ToList();
+
+            // Apply status filter
+            if (!string.IsNullOrEmpty(status))
+            {
+                userCourseProgress = userCourseProgress
+                    .Where(ucp => ucp.status.Equals(status, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            // Apply search filter
+            if (!string.IsNullOrEmpty(search))
+            {
+                var searchLower = search.ToLower();
+                userCourseProgress = userCourseProgress
+                    .Where(ucp => 
+                        ucp.userName.ToLower().Contains(searchLower) ||
+                        ucp.email.ToLower().Contains(searchLower) ||
+                        ucp.courseTitle.ToLower().Contains(searchLower) ||
+                        ucp.courseCategory.ToLower().Contains(searchLower))
+                    .ToList();
+            }
+
+            // Order by completion status and progress
+            userCourseProgress = userCourseProgress
+                .OrderByDescending(ucp => ucp.completed)
+                .ThenByDescending(ucp => ucp.progressPercent)
+                .ThenBy(ucp => ucp.userName)
+                .ToList();
+
+            // User statistics
+            var userStats = userCourseProgress
+                .GroupBy(ucp => ucp.userId)
+                .Select(g => new
+                {
+                    userId = g.Key,
+                    userName = g.First().userName,
+                    email = g.First().email,
+                    totalCourses = g.Count(),
+                    completed = g.Count(ucp => ucp.completed),
+                    inProgress = g.Count(ucp => ucp.status == "In Progress"),
+                    notStarted = g.Count(ucp => ucp.status == "Not Started"),
+                    averageProgress = Math.Round(g.Average(ucp => ucp.progressPercent), 2),
+                    completionRate = g.Count() > 0 
+                        ? Math.Round((g.Count(ucp => ucp.completed) / (double)g.Count()) * 100, 2) 
+                        : 0
+                })
+                .OrderByDescending(us => us.completionRate)
+                .ToList();
+
+            // Course statistics
+            var courseStats = userCourseProgress
+                .GroupBy(ucp => ucp.courseId)
+                .Select(g => new
+                {
+                    courseId = g.Key,
+                    courseTitle = g.First().courseTitle,
+                    category = g.First().courseCategory,
+                    totalEnrolled = g.Count(),
+                    completed = g.Count(ucp => ucp.completed),
+                    inProgress = g.Count(ucp => ucp.status == "In Progress"),
+                    notStarted = g.Count(ucp => ucp.status == "Not Started"),
+                    averageProgress = Math.Round(g.Average(ucp => ucp.progressPercent), 2),
+                    completionRate = g.Count() > 0 
+                        ? Math.Round((g.Count(ucp => ucp.completed) / (double)g.Count()) * 100, 2) 
+                        : 0,
+                    averageCompletionTime = g.Where(ucp => ucp.daysToComplete.HasValue)
+                        .Select(ucp => ucp.daysToComplete.Value)
+                        .DefaultIfEmpty(0)
+                        .Average()
+                })
+                .OrderByDescending(cs => cs.totalEnrolled)
+                .ToList();
+
+            // Status breakdown
+            var statusBreakdown = userCourseProgress
+                .GroupBy(ucp => ucp.status)
+                .Select(g => new
+                {
+                    status = g.Key,
+                    count = g.Count(),
+                    percentage = userCourseProgress.Count > 0 
+                        ? Math.Round((g.Count() / (double)userCourseProgress.Count) * 100, 2) 
+                        : 0
+                })
+                .ToList();
+
+            // Performance breakdown
+            var performanceBreakdown = userCourseProgress
+                .Where(ucp => ucp.performance != "N/A")
+                .GroupBy(ucp => ucp.performance)
+                .Select(g => new
+                {
+                    performance = g.Key,
+                    count = g.Count()
+                })
+                .ToList();
+
+            // Stale enrollments (not completed, >30 days, <50% progress)
+            var staleEnrollments = userCourseProgress
+                .Where(ucp => ucp.isStale)
+                .Take(10)
+                .ToList();
+
+            // Top performers
+            var topPerformers = userStats
+                .Where(us => us.totalCourses >= 3)
+                .OrderByDescending(us => us.completionRate)
+                .ThenByDescending(us => us.completed)
+                .Take(10)
+                .ToList();
+
+            var summary = new
+            {
+                totalUsers = users.Count,
+                totalCourses = courses.Count,
+                totalEnrollments = userCourseProgress.Count,
+                totalCompleted = userCourseProgress.Count(ucp => ucp.completed),
+                totalInProgress = userCourseProgress.Count(ucp => ucp.status == "In Progress"),
+                totalNotStarted = userCourseProgress.Count(ucp => ucp.status == "Not Started"),
+                averageProgressPercent = userCourseProgress.Any() 
+                    ? Math.Round(userCourseProgress.Average(ucp => ucp.progressPercent), 2) 
+                    : 0,
+                overallCompletionRate = userCourseProgress.Any() 
+                    ? Math.Round((userCourseProgress.Count(ucp => ucp.completed) / (double)userCourseProgress.Count) * 100, 2) 
+                    : 0,
+                staleEnrollmentsCount = userCourseProgress.Count(ucp => ucp.isStale),
+                activeUsers = userCourseProgress.Select(ucp => ucp.userId).Distinct().Count(),
+                averageCoursesPerUser = users.Count > 0 
+                    ? Math.Round(userCourseProgress.Count / (double)users.Count, 2) 
+                    : 0
+            };
+
+            return Ok(new
+            {
+                userCourseProgress,
+                userStats,
+                courseStats,
+                statusBreakdown,
+                performanceBreakdown,
+                staleEnrollments,
+                topPerformers,
+                summary
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating user-course progress report");
+            return StatusCode(500, new { error = "Failed to generate user-course progress report", details = ex.Message });
+        }
+    }
+
+    #endregion
+
     #region Content Usage Report
 
     [HttpGet("content-usage")]
-    public async Task<IActionResult> GetContentUsageReport()
+    public async Task<IActionResult> GetContentUsageReport(
+        [FromQuery] string? category,
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate)
     {
         try
         {
@@ -677,52 +1229,141 @@ public class AdminReportsController : ControllerBase
             if (orgId.HasValue)
                 coursesQuery = coursesQuery.Where(c => c.OrganisationId == orgId);
 
+            if (!string.IsNullOrEmpty(category))
+                coursesQuery = coursesQuery.Where(c => c.Category == category);
+
             var courses = await coursesQuery.ToListAsync();
             var courseIds = courses.Select(c => c.Id).ToList();
 
-            // Get content usage from progress
-            var contentUsage = await _context.LearnerProgresses
+            // Get learner progress data
+            var progressQuery = _context.LearnerProgresses
                 .AsNoTracking()
-                .Where(lp => courseIds.Contains(lp.CourseId!))
-                .GroupBy(lp => lp.CourseId)
-                .Select(g => new
-                {
-                    courseId = g.Key,
-                    accessCount = g.Count(),
-                    uniqueUsers = g.Select(lp => lp.UserId).Distinct().Count()
-                })
+                .Where(lp => courseIds.Contains(lp.CourseId!));
+
+            // Apply date filters
+            if (startDate.HasValue)
+                progressQuery = progressQuery.Where(lp => lp.CompletedAt >= startDate.Value || lp.CompletedAt == null);
+            if (endDate.HasValue)
+                progressQuery = progressQuery.Where(lp => lp.CompletedAt <= endDate.Value || lp.CompletedAt == null);
+
+            var allProgress = await progressQuery.ToListAsync();
+
+            // Get lessons for courses
+            var lessons = await _context.Lessons
+                .AsNoTracking()
+                .Where(l => courseIds.Contains(l.CourseId))
                 .ToListAsync();
 
             var result = courses.Select(c =>
             {
-                var usage = contentUsage.FirstOrDefault(cu => cu.courseId == c.Id);
-                var accessCount = usage?.accessCount ?? 0;
+                var courseProgress = allProgress.Where(lp => lp.CourseId == c.Id).ToList();
+                var accessCount = courseProgress.Count;
+                var uniqueUsers = courseProgress.Select(lp => lp.UserId).Distinct().Count();
+                var completions = courseProgress.Count(lp => lp.Completed);
+                var avgProgress = courseProgress.Any() ? courseProgress.Average(lp => lp.ProgressPercent) : 0;
+                
+                // Last access date
+                var lastAccess = courseProgress
+                    .Where(lp => lp.CompletedAt.HasValue)
+                    .OrderByDescending(lp => lp.CompletedAt)
+                    .FirstOrDefault()?.CompletedAt;
+
+                // Calculate engagement level
+                string engagementLevel;
+                if (accessCount > 100) engagementLevel = "High";
+                else if (accessCount > 30) engagementLevel = "Medium";
+                else if (accessCount > 0) engagementLevel = "Low";
+                else engagementLevel = "None";
+
+                // Get lesson count
+                var lessonCount = lessons.Count(l => l.CourseId == c.Id);
+
+                // Calculate usage score (access count + unique users * 2 + completions * 3)
+                var usageScore = accessCount + (uniqueUsers * 2) + (completions * 3);
 
                 return new
                 {
                     contentId = c.Id,
                     contentTitle = c.Title,
                     contentType = "Course",
-                    category = c.Category,
+                    category = c.Category ?? "Uncategorized",
                     accessCount,
-                    uniqueUsers = usage?.uniqueUsers ?? 0,
-                    engagementLevel = accessCount > 100 ? "High" : accessCount > 30 ? "Medium" : accessCount > 0 ? "Low" : "None",
-                    isUnused = accessCount == 0
+                    uniqueUsers,
+                    completions,
+                    completionRate = accessCount > 0 ? Math.Round((completions / (double)accessCount) * 100, 2) : 0,
+                    averageProgress = Math.Round(avgProgress, 2),
+                    engagementLevel,
+                    lessonCount,
+                    lastAccessDate = lastAccess,
+                    daysSinceLastAccess = lastAccess.HasValue ? (int)(DateTime.UtcNow - lastAccess.Value).TotalDays : (int?)null,
+                    isUnused = accessCount == 0,
+                    usageScore,
+                    createdAt = c.CreatedAt
                 };
-            }).OrderByDescending(c => c.accessCount).ToList();
+            }).OrderByDescending(c => c.usageScore).ToList();
+
+            // Category breakdown
+            var categoryBreakdown = result.GroupBy(c => c.category)
+                .Select(g => new
+                {
+                    category = g.Key,
+                    contentCount = g.Count(),
+                    totalAccesses = g.Sum(c => c.accessCount),
+                    totalUsers = g.Sum(c => c.uniqueUsers),
+                    averageEngagement = g.Average(c => c.accessCount),
+                    unusedContent = g.Count(c => c.isUnused)
+                })
+                .OrderByDescending(c => c.totalAccesses)
+                .ToList();
+
+            // Engagement breakdown
+            var engagementBreakdown = result.GroupBy(c => c.engagementLevel)
+                .Select(g => new
+                {
+                    level = g.Key,
+                    count = g.Count(),
+                    percentage = result.Count > 0 ? Math.Round((g.Count() / (double)result.Count) * 100, 2) : 0
+                })
+                .ToList();
+
+            // Top performers
+            var topContent = result.Where(c => !c.isUnused).Take(10).ToList();
+            var unusedContent = result.Where(c => c.isUnused).ToList();
+            var underutilizedContent = result.Where(c => c.accessCount > 0 && c.accessCount < 10).OrderBy(c => c.accessCount).Take(10).ToList();
+
+            // Usage trends (group by category)
+            var usageTrends = categoryBreakdown.Select(c => new
+            {
+                category = c.category,
+                accessCount = c.totalAccesses
+            }).ToList();
 
             var summary = new
             {
                 totalContent = result.Count,
                 totalAccesses = result.Sum(c => c.accessCount),
-                unusedContent = result.Count(c => c.isUnused),
+                totalUniqueUsers = result.Sum(c => c.uniqueUsers),
+                unusedContent = unusedContent.Count,
+                underutilizedContent = underutilizedContent.Count,
                 highEngagement = result.Count(c => c.engagementLevel == "High"),
                 mediumEngagement = result.Count(c => c.engagementLevel == "Medium"),
                 lowEngagement = result.Count(c => c.engagementLevel == "Low"),
-                mostAccessedContent = result.FirstOrDefault()?.contentTitle ?? "N/A"
+                averageAccessPerContent = result.Count > 0 ? Math.Round(result.Average(c => c.accessCount), 2) : 0,
+                mostAccessedContent = result.OrderByDescending(c => c.accessCount).FirstOrDefault()?.contentTitle ?? "N/A",
+                leastAccessedContent = result.Where(c => !c.isUnused).OrderBy(c => c.accessCount).FirstOrDefault()?.contentTitle ?? "N/A"
             };
 
-            return Ok(new { content = result, summary });
+            return Ok(new
+            {
+                content = result,
+                summary,
+                categoryBreakdown,
+                engagementBreakdown,
+                topContent,
+                unusedContent = unusedContent.Take(10).ToList(),
+                underutilizedContent,
+                usageTrends
+            });
         }
         catch (Exception ex)
         {
@@ -732,4 +1373,396 @@ public class AdminReportsController : ControllerBase
     }
 
     #endregion
+
+    #region Custom Report Builder
+
+    [HttpPost("custom-report")]
+    public async Task<IActionResult> GenerateCustomReport([FromBody] CustomReportRequest request)
+    {
+        try
+        {
+            var orgId = await GetOrgIdFilter();
+
+            // Validate request
+            if (request.Metrics == null || !request.Metrics.Any())
+                return BadRequest(new { error = "At least one metric must be selected" });
+
+            var reportData = new Dictionary<string, object>();
+            var dataPoints = new List<object>();
+
+            // Build query based on selected entity type
+            switch (request.EntityType?.ToLower())
+            {
+                case "users":
+                    dataPoints = await BuildUserReport(request, orgId);
+                    break;
+                case "courses":
+                    dataPoints = await BuildCourseReport(request, orgId);
+                    break;
+                case "pathways":
+                    dataPoints = await BuildPathwayReport(request, orgId);
+                    break;
+                case "progress":
+                    dataPoints = await BuildProgressReport(request, orgId);
+                    break;
+                default:
+                    return BadRequest(new { error = "Invalid entity type. Supported: users, courses, pathways, progress" });
+            }
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(request.FilterBy) && request.FilterValue != null)
+            {
+                dataPoints = ApplyCustomFilters(dataPoints, request.FilterBy, request.FilterValue);
+            }
+
+            // Apply sorting
+            if (!string.IsNullOrEmpty(request.SortBy))
+            {
+                dataPoints = ApplySorting(dataPoints, request.SortBy, request.SortDescending ?? true);
+            }
+
+            // Apply grouping
+            Dictionary<string, object>? groupedData = null;
+            if (!string.IsNullOrEmpty(request.GroupBy))
+            {
+                groupedData = ApplyGrouping(dataPoints, request.GroupBy, request.Metrics);
+            }
+
+            // Calculate summary statistics
+            var summary = CalculateSummary(dataPoints, request.Metrics);
+
+            return Ok(new
+            {
+                entityType = request.EntityType,
+                metrics = request.Metrics,
+                dataPoints = dataPoints.Take(request.Limit ?? 100),
+                totalRecords = dataPoints.Count,
+                groupedData,
+                summary,
+                generatedAt = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating custom report");
+            return StatusCode(500, new { error = "Failed to generate custom report", details = ex.Message });
+        }
+    }
+
+    private async Task<List<object>> BuildUserReport(CustomReportRequest request, long? orgId)
+    {
+        var usersQuery = _context.Users.AsNoTracking();
+        if (orgId.HasValue)
+            usersQuery = usersQuery.Where(u => u.OrganisationID == orgId);
+
+        // Apply date filters
+        if (request.StartDate.HasValue)
+            usersQuery = usersQuery.Where(u => u.CreatedOn >= request.StartDate.Value);
+        if (request.EndDate.HasValue)
+            usersQuery = usersQuery.Where(u => u.CreatedOn <= request.EndDate.Value);
+
+        var users = await usersQuery.ToListAsync();
+        var userIds = users.Select(u => u.Id).ToList();
+
+        // Get progress data
+        var progressData = await _context.LearnerProgresses
+            .AsNoTracking()
+            .Where(lp => userIds.Contains(lp.UserId))
+            .ToListAsync();
+
+        var result = users.Select(u =>
+        {
+            var userProgress = progressData.Where(lp => lp.UserId == u.Id).ToList();
+            var fullName = $"{u.FirstName} {u.LastName}".Trim();
+            var data = new Dictionary<string, object>
+            {
+                ["userId"] = u.Id,
+                ["name"] = !string.IsNullOrEmpty(fullName) ? fullName : "Unknown",
+                ["email"] = u.Email ?? "N/A",
+                ["status"] = u.ActiveStatus == 1 ? "Active" : "Inactive",
+                ["createdAt"] = u.CreatedOn
+            };
+
+            // Add metrics based on selection
+            if (request.Metrics.Contains("enrollments"))
+                data["enrollments"] = userProgress.Count;
+            if (request.Metrics.Contains("completions"))
+                data["completions"] = userProgress.Count(lp => lp.Completed);
+            if (request.Metrics.Contains("averageProgress"))
+                data["averageProgress"] = userProgress.Any() ? Math.Round(userProgress.Average(lp => lp.ProgressPercent), 2) : 0;
+            if (request.Metrics.Contains("lastActivity"))
+            {
+                var lastActivity = userProgress.Where(lp => lp.CompletedAt.HasValue)
+                    .OrderByDescending(lp => lp.CompletedAt)
+                    .FirstOrDefault();
+                data["lastActivity"] = lastActivity?.CompletedAt ?? u.CreatedOn;
+            }
+            if (request.Metrics.Contains("engagementScore"))
+            {
+                var completions = userProgress.Count(lp => lp.Completed);
+                var avgProgress = userProgress.Any() ? userProgress.Average(lp => lp.ProgressPercent) : 0;
+                data["engagementScore"] = Math.Round((completions * 10) + (avgProgress * 0.5), 2);
+            }
+
+            return (object)data;
+        }).ToList();
+
+        return result;
+    }
+
+    private async Task<List<object>> BuildCourseReport(CustomReportRequest request, long? orgId)
+    {
+        var coursesQuery = _context.Courses.AsNoTracking();
+        if (orgId.HasValue)
+            coursesQuery = coursesQuery.Where(c => c.OrganisationId == orgId);
+
+        // Apply date filters
+        if (request.StartDate.HasValue)
+            coursesQuery = coursesQuery.Where(c => c.CreatedAt >= request.StartDate.Value);
+        if (request.EndDate.HasValue)
+            coursesQuery = coursesQuery.Where(c => c.CreatedAt <= request.EndDate.Value);
+
+        var courses = await coursesQuery.ToListAsync();
+        var courseIds = courses.Select(c => c.Id).ToList();
+
+        // Get progress data
+        var progressData = await _context.LearnerProgresses
+            .AsNoTracking()
+            .Where(lp => courseIds.Contains(lp.CourseId!))
+            .ToListAsync();
+
+        var result = courses.Select(c =>
+        {
+            var courseProgress = progressData.Where(lp => lp.CourseId == c.Id).ToList();
+            var data = new Dictionary<string, object>
+            {
+                ["courseId"] = c.Id,
+                ["title"] = c.Title,
+                ["category"] = c.Category ?? "Uncategorized",
+                ["createdAt"] = c.CreatedAt
+            };
+
+            // Add metrics based on selection
+            if (request.Metrics.Contains("enrollments"))
+                data["enrollments"] = courseProgress.Count;
+            if (request.Metrics.Contains("completions"))
+                data["completions"] = courseProgress.Count(lp => lp.Completed);
+            if (request.Metrics.Contains("completionRate"))
+            {
+                var totalEnrollments = courseProgress.Count;
+                var completions = courseProgress.Count(lp => lp.Completed);
+                data["completionRate"] = totalEnrollments > 0 ? Math.Round((completions * 100.0) / totalEnrollments, 2) : 0;
+            }
+            if (request.Metrics.Contains("averageProgress"))
+                data["averageProgress"] = courseProgress.Any() ? Math.Round(courseProgress.Average(lp => lp.ProgressPercent), 2) : 0;
+            if (request.Metrics.Contains("averageCompletionTime"))
+            {
+                var completedProgress = courseProgress.Where(lp => lp.Completed && lp.CompletedAt.HasValue).ToList();
+                if (completedProgress.Any())
+                {
+                    var avgTime = completedProgress
+                        .Where(lp => lp.CompletedAt > c.CreatedAt)
+                        .Select(lp => (lp.CompletedAt!.Value - c.CreatedAt).TotalDays)
+                        .Where(days => days > 0)
+                        .DefaultIfEmpty(0)
+                        .Average();
+                    data["averageCompletionTime"] = Math.Round(avgTime, 2);
+                }
+                else
+                {
+                    data["averageCompletionTime"] = 0;
+                }
+            }
+
+            return (object)data;
+        }).ToList();
+
+        return result;
+    }
+
+    private async Task<List<object>> BuildPathwayReport(CustomReportRequest request, long? orgId)
+    {
+        var pathwaysQuery = _context.LearningPathways.AsNoTracking();
+        if (orgId.HasValue)
+            pathwaysQuery = pathwaysQuery.Where(p => p.OrganisationId == orgId);
+
+        var pathways = await pathwaysQuery.ToListAsync();
+        var pathwayIds = pathways.Select(p => p.Id).ToList();
+
+        // Get pathway progress data
+        var progressData = await _context.LearnerPathwayProgresses
+            .AsNoTracking()
+            .Where(lpp => pathwayIds.Contains(lpp.LearningPathwayId))
+            .ToListAsync();
+
+        var result = pathways.Select(p =>
+        {
+            var pathwayProgress = progressData.Where(lpp => lpp.LearningPathwayId == p.Id).ToList();
+            var data = new Dictionary<string, object>
+            {
+                ["pathwayId"] = p.Id,
+                ["title"] = p.Title,
+                ["description"] = p.Description ?? "",
+                ["isActive"] = p.IsActive
+            };
+
+            // Add metrics based on selection
+            if (request.Metrics.Contains("enrollments"))
+                data["enrollments"] = pathwayProgress.Count;
+            if (request.Metrics.Contains("completions"))
+                data["completions"] = pathwayProgress.Count(lpp => lpp.IsCompleted);
+            if (request.Metrics.Contains("completionRate"))
+            {
+                var totalEnrollments = pathwayProgress.Count;
+                var completions = pathwayProgress.Count(lpp => lpp.IsCompleted);
+                data["completionRate"] = totalEnrollments > 0 ? Math.Round((completions * 100.0) / totalEnrollments, 2) : 0;
+            }
+            if (request.Metrics.Contains("averageProgress"))
+                data["averageProgress"] = pathwayProgress.Any() ? Math.Round(pathwayProgress.Average(lpp => lpp.ProgressPercent), 2) : 0;
+
+            return (object)data;
+        }).ToList();
+
+        return result;
+    }
+
+    private async Task<List<object>> BuildProgressReport(CustomReportRequest request, long? orgId)
+    {
+        var progressQuery = _context.LearnerProgresses
+            .AsNoTracking()
+            .Include(lp => lp.User)
+            .Include(lp => lp.Course)
+            .AsQueryable();
+
+        if (orgId.HasValue)
+            progressQuery = progressQuery.Where(lp => lp.User!.OrganisationID == orgId);
+
+        // Apply date filters
+        if (request.StartDate.HasValue)
+            progressQuery = progressQuery.Where(lp => lp.CompletedAt >= request.StartDate.Value || lp.CompletedAt == null);
+        if (request.EndDate.HasValue)
+            progressQuery = progressQuery.Where(lp => lp.CompletedAt <= request.EndDate.Value || lp.CompletedAt == null);
+
+        var progressData = await progressQuery.ToListAsync();
+
+        var result = progressData.Select(lp =>
+        {
+            var userName = lp.User != null ? $"{lp.User.FirstName} {lp.User.LastName}".Trim() : "Unknown";
+            var data = new Dictionary<string, object>
+            {
+                ["progressId"] = lp.Id,
+                ["userId"] = lp.UserId,
+                ["userName"] = !string.IsNullOrEmpty(userName) ? userName : "Unknown",
+                ["courseId"] = lp.CourseId ?? "",
+                ["courseTitle"] = lp.Course?.Title ?? "N/A",
+                ["progressPercent"] = lp.ProgressPercent,
+                ["completed"] = lp.Completed,
+                ["completedAt"] = lp.CompletedAt
+            };
+
+            // Add metrics based on selection
+            if (request.Metrics.Contains("timeToComplete") && lp.Completed && lp.CompletedAt.HasValue && lp.Course != null)
+            {
+                var timeToComplete = (lp.CompletedAt.Value - lp.Course.CreatedAt).TotalDays;
+                data["timeToComplete"] = Math.Round(timeToComplete > 0 ? timeToComplete : 0, 2);
+            }
+
+            return (object)data;
+        }).ToList();
+
+        return result;
+    }
+
+    private List<object> ApplyCustomFilters(List<object> dataPoints, string filterBy, object filterValue)
+    {
+        return dataPoints.Where(item =>
+        {
+            var dict = item as Dictionary<string, object>;
+            if (dict == null || !dict.ContainsKey(filterBy))
+                return false;
+
+            var value = dict[filterBy];
+            return value?.ToString()?.Contains(filterValue.ToString() ?? "", StringComparison.OrdinalIgnoreCase) ?? false;
+        }).ToList();
+    }
+
+    private List<object> ApplySorting(List<object> dataPoints, string sortBy, bool descending)
+    {
+        return descending
+            ? dataPoints.OrderByDescending(item =>
+            {
+                var dict = item as Dictionary<string, object>;
+                return dict != null && dict.ContainsKey(sortBy) ? dict[sortBy] : null;
+            }).ToList()
+            : dataPoints.OrderBy(item =>
+            {
+                var dict = item as Dictionary<string, object>;
+                return dict != null && dict.ContainsKey(sortBy) ? dict[sortBy] : null;
+            }).ToList();
+    }
+
+    private Dictionary<string, object> ApplyGrouping(List<object> dataPoints, string groupBy, List<string> metrics)
+    {
+        var grouped = dataPoints
+            .GroupBy(item =>
+            {
+                var dict = item as Dictionary<string, object>;
+                return dict != null && dict.ContainsKey(groupBy) ? dict[groupBy]?.ToString() ?? "N/A" : "N/A";
+            })
+            .ToDictionary(
+                g => g.Key,
+                g => (object)new
+                {
+                    count = g.Count(),
+                    items = g.Take(5).ToList() // Show first 5 items per group
+                }
+            );
+
+        return grouped;
+    }
+
+    private Dictionary<string, object> CalculateSummary(List<object> dataPoints, List<string> metrics)
+    {
+        var summary = new Dictionary<string, object>
+        {
+            ["totalRecords"] = dataPoints.Count
+        };
+
+        foreach (var metric in metrics)
+        {
+            var values = dataPoints
+                .Select(item => item as Dictionary<string, object>)
+                .Where(dict => dict != null && dict.ContainsKey(metric))
+                .Select(dict => dict![metric])
+                .Where(val => val != null && (val is int || val is double || val is decimal))
+                .Select(val => Convert.ToDouble(val))
+                .ToList();
+
+            if (values.Any())
+            {
+                summary[$"{metric}_total"] = Math.Round(values.Sum(), 2);
+                summary[$"{metric}_average"] = Math.Round(values.Average(), 2);
+                summary[$"{metric}_max"] = Math.Round(values.Max(), 2);
+                summary[$"{metric}_min"] = Math.Round(values.Min(), 2);
+            }
+        }
+
+        return summary;
+    }
+
+    #endregion
+}
+
+public class CustomReportRequest
+{
+    public string EntityType { get; set; } = "users"; // users, courses, pathways, progress
+    public List<string> Metrics { get; set; } = new(); // Selected metrics to include
+    public string? GroupBy { get; set; } // Field to group by
+    public string? SortBy { get; set; } // Field to sort by
+    public bool? SortDescending { get; set; } = true; // Sort direction
+    public string? FilterBy { get; set; } // Field to filter by
+    public object? FilterValue { get; set; } // Filter value
+    public DateTime? StartDate { get; set; } // Date range start
+    public DateTime? EndDate { get; set; } // Date range end
+    public int? Limit { get; set; } = 100; // Max records to return
 }

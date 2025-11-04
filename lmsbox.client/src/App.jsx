@@ -18,6 +18,13 @@ import QuizCreator from './pages/QuizCreator';
 import UserActivityReport from './pages/UserActivityReport';
 import UserProgressReport from './pages/UserProgressReport';
 import CourseEnrollmentReport from './pages/CourseEnrollmentReport';
+import CourseCompletionReport from './pages/CourseCompletionReport';
+import LessonAnalyticsReport from './pages/LessonAnalyticsReport';
+import ContentUsageReport from './pages/ContentUsageReport';
+import PathwayProgressReport from './pages/PathwayProgressReport';
+import PathwayAssignmentsReport from './pages/PathwayAssignmentsReport';
+import UserCourseProgressReport from './pages/UserCourseProgressReport';
+import CustomReportBuilder from './pages/CustomReportBuilder';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -146,6 +153,62 @@ function App() {
             element={
               <AdminRoute>
                 <CourseEnrollmentReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/course-completion"
+            element={
+              <AdminRoute>
+                <CourseCompletionReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/lesson-analytics"
+            element={
+              <AdminRoute>
+                <LessonAnalyticsReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/content-usage"
+            element={
+              <AdminRoute>
+                <ContentUsageReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/pathway-progress"
+            element={
+              <AdminRoute>
+                <PathwayProgressReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/pathway-assignments"
+            element={
+              <AdminRoute>
+                <PathwayAssignmentsReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/user-course-progress"
+            element={
+              <AdminRoute>
+                <UserCourseProgressReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/custom-builder"
+            element={
+              <AdminRoute>
+                <CustomReportBuilder />
               </AdminRoute>
             }
           />

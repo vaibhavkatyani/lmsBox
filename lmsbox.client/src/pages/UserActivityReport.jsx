@@ -213,7 +213,6 @@ export default function UserActivityReport() {
             {loading ? 'Refreshing...' : 'Refresh Report'}
           </button>
         </div>
-        </div>
 
         {/* Filters Panel */}
         {showFilters && (
