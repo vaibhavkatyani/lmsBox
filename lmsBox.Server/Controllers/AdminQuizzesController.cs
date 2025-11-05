@@ -381,39 +381,4 @@ namespace lmsBox.Server.Controllers
             return Ok(new { message = "Quiz deleted successfully" });
         }
     }
-
-    public class CreateQuizRequest
-    {
-        public string Title { get; set; } = null!;
-        public string? Description { get; set; }
-        public int PassingScore { get; set; } = 70;
-        public bool IsTimed { get; set; } = false;
-        public int TimeLimit { get; set; } = 30;
-        public bool ShuffleQuestions { get; set; } = false;
-        public bool ShuffleAnswers { get; set; } = false;
-        public bool ShowResults { get; set; } = true;
-        public bool AllowRetake { get; set; } = true;
-        public int MaxAttempts { get; set; } = 3;
-        public string CourseId { get; set; } = null!;
-        public List<CreateQuestionRequest> Questions { get; set; } = new();
-    }
-
-    public class UpdateQuizRequest : CreateQuizRequest
-    {
-    }
-
-    public class CreateQuestionRequest
-    {
-        public string Question { get; set; } = null!;
-        public string Type { get; set; } = "mc_single";
-        public int Points { get; set; } = 1;
-        public string? Explanation { get; set; }
-        public List<CreateOptionRequest> Options { get; set; } = new();
-    }
-
-    public class CreateOptionRequest
-    {
-        public string Text { get; set; } = null!;
-        public bool IsCorrect { get; set; } = false;
-    }
 }

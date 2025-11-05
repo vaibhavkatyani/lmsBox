@@ -200,6 +200,9 @@ builder.Services.AddHttpClient();
 // Email service registration (uses SendGrid like LoginLinkService)
 builder.Services.AddScoped<lmsBox.Server.Services.IEmailService, lmsBox.Server.Services.EmailService>();
 
+// Azure Blob Storage service registration
+builder.Services.AddScoped<lmsBox.Server.Services.IAzureBlobService, lmsBox.Server.Services.AzureBlobService>();
+
 var app = builder.Build();
 
 // Serilog request logging - logs HTTP requests and responses

@@ -1,11 +1,16 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AdminHeader from '../components/AdminHeader';
+import VideoLessonModal from '../components/VideoLessonModal';
+import PdfLessonModal from '../components/PdfLessonModal';
+import ScormLessonModal from '../components/ScormLessonModal';
+import QuizLessonModal from '../components/QuizLessonModal';
 import toast from 'react-hot-toast';
 import { uploadMedia, uploadScorm } from '../services/upload';
 import { listQuizzes } from '../services/quizzes';
 import usePageTitle from '../hooks/usePageTitle';
 import { adminCourseService, courseHelpers } from '../services/adminCourses';
+import lessonsService from '../services/lessons';
 
 export default function AdminCourseEditor() {
   const navigate = useNavigate();
@@ -101,7 +106,24 @@ export default function AdminCourseEditor() {
   });
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  // Quiz picker state
+  
+  // Video Lesson Modal state
+  const [videoLessonModalOpen, setVideoLessonModalOpen] = useState(false);
+  const [editingVideoLesson, setEditingVideoLesson] = useState(null);
+  
+  // PDF Lesson Modal state
+  const [pdfLessonModalOpen, setPdfLessonModalOpen] = useState(false);
+  const [editingPdfLesson, setEditingPdfLesson] = useState(null);
+  
+  // SCORM Lesson Modal state
+  const [scormLessonModalOpen, setScormLessonModalOpen] = useState(false);
+  const [editingScormLesson, setEditingScormLesson] = useState(null);
+  
+  // Quiz Lesson Modal state
+  const [quizLessonModalOpen, setQuizLessonModalOpen] = useState(false);
+  const [editingQuizLesson, setEditingQuizLesson] = useState(null);
+  
+  // Quiz picker state (old - can be removed after migration)
   const [quizPickerOpen, setQuizPickerOpen] = useState(false);
   const [quizSearch, setQuizSearch] = useState('');
   const [quizLoading, setQuizLoading] = useState(false);
@@ -189,6 +211,83 @@ export default function AdminCourseEditor() {
   const removeTag = (tag) => setForm(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
 
   // ---------- Lessons handlers ----------
+  
+  // Load lessons from API
+  const loadLessons = async () => {
+    if (!courseId) return;
+    try {
+      const lessonsData = await lessonsService.getLessons(courseId);
+      setLessons(lessonsData);
+    } catch (error) {
+      console.error('Error loading lessons:', error);
+      toast.error('Failed to load lessons');
+    }
+  };
+
+  // Load lessons when switching to lessons tab
+  useEffect(() => {
+    if (activeTab === 'lessons' && courseId && !isNew) {
+      loadLessons();
+    }
+  }, [activeTab, courseId, isNew]);
+
+  // Handle video lesson modal
+  const handleOpenVideoLessonModal = (lesson = null) => {
+    setEditingVideoLesson(lesson);
+    setVideoLessonModalOpen(true);
+  };
+
+  const handleVideoLessonSaved = () => {
+    loadLessons();
+    toast.success('Video lesson saved successfully');
+  };
+
+  // Handle PDF lesson modal
+  const handleOpenPdfLessonModal = (lesson = null) => {
+    setEditingPdfLesson(lesson);
+    setPdfLessonModalOpen(true);
+  };
+
+  const handlePdfLessonSaved = () => {
+    loadLessons();
+    toast.success('PDF lesson saved successfully');
+  };
+
+  // Handle SCORM lesson modal
+  const handleOpenScormLessonModal = (lesson = null) => {
+    setEditingScormLesson(lesson);
+    setScormLessonModalOpen(true);
+  };
+
+  const handleScormLessonSaved = () => {
+    loadLessons();
+    toast.success('SCORM lesson saved successfully');
+  };
+
+  // Handle Quiz lesson modal
+  const handleOpenQuizLessonModal = (lesson = null) => {
+    setEditingQuizLesson(lesson);
+    setQuizLessonModalOpen(true);
+  };
+
+  const handleQuizLessonSaved = () => {
+    loadLessons();
+    toast.success('Quiz lesson saved successfully');
+  };
+
+  const handleDeleteLesson = async (lessonId) => {
+    if (!window.confirm('Are you sure you want to delete this lesson?')) return;
+    
+    try {
+      await lessonsService.deleteLesson(courseId, lessonId);
+      toast.success('Lesson deleted');
+      loadLessons();
+    } catch (error) {
+      console.error('Error deleting lesson:', error);
+      toast.error('Failed to delete lesson');
+    }
+  };
+  
   const newId = () => 'l' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
   const defaultDraftFor = (type) => ({
     id: '',
@@ -476,11 +575,36 @@ export default function AdminCourseEditor() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900">Lessons</h2>
                 <div className="flex items-center gap-2">
-                  <AddLessonMenu onAdd={(type) => {
-                    startAddLesson(type);
-                  }} />
+                  {!isNew && courseId && (
+                    <AddLessonMenu 
+                      onAdd={(type) => {
+                        if (type === 'video') {
+                          handleOpenVideoLessonModal();
+                        } else if (type === 'pdf' || type === 'document') {
+                          handleOpenPdfLessonModal();
+                        } else if (type === 'scorm') {
+                          handleOpenScormLessonModal();
+                        } else if (type === 'quiz') {
+                          handleOpenQuizLessonModal();
+                        } else {
+                          startAddLesson(type);
+                        }
+                      }} 
+                    />
+                  )}
+                  {isNew && (
+                    <AddLessonMenu onAdd={(type) => {
+                      startAddLesson(type);
+                    }} />
+                  )}
                 </div>
               </div>
+
+              {isNew && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                  <strong>Note:</strong> Please save the course first before adding lessons.
+                </div>
+              )}
 
               {/* Lessons table */}
               <div className="overflow-x-auto border rounded">
@@ -502,11 +626,11 @@ export default function AdminCourseEditor() {
                     ) : (
                       lessons.map((l, idx) => (
                         <tr key={l.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 w-20">{idx + 1}</td>
+                          <td className="px-4 py-3 w-20">{l.ordinal || idx + 1}</td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-gray-900">{l.title || <span className="text-gray-400">Untitled</span>}</div>
-                            {l.description && (
-                              <div className="text-xs text-gray-500 truncate max-w-[420px]">{l.description}</div>
+                            {l.content && (
+                              <div className="text-xs text-gray-500 truncate max-w-[420px]">{l.content}</div>
                             )}
                             {l.type === 'quiz' && l.quizId && (
                               <div className="text-xs text-blue-600 mt-1">Quiz ID: {l.quizId}</div>
@@ -518,10 +642,74 @@ export default function AdminCourseEditor() {
                           <td className="px-4 py-3">{l.isOptional ? 'Yes' : 'No'}</td>
                           <td className="px-4 py-3">
                             <div className="flex justify-end gap-2">
-                              <button onClick={() => moveLesson(idx, 'up')} disabled={idx===0} className="px-2 py-1 text-sm bg-gray-100 text-gray-700 rounded disabled:opacity-40">↑</button>
-                              <button onClick={() => moveLesson(idx, 'down')} disabled={idx===lessons.length-1} className="px-2 py-1 text-sm bg-gray-100 text-gray-700 rounded disabled:opacity-40">↓</button>
-                              <button onClick={() => editLesson(idx)} className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100">Edit</button>
-                              <button onClick={() => deleteLesson(idx)} className="px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100">Delete</button>
+                              {l.type === 'video' ? (
+                                <>
+                                  <button 
+                                    onClick={() => handleOpenVideoLessonModal(l)} 
+                                    className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteLesson(l.id)} 
+                                    className="px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              ) : l.type === 'document' ? (
+                                <>
+                                  <button 
+                                    onClick={() => handleOpenPdfLessonModal(l)} 
+                                    className="px-3 py-1.5 text-sm bg-purple-50 text-purple-700 rounded hover:bg-purple-100"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteLesson(l.id)} 
+                                    className="px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              ) : l.type === 'scorm' ? (
+                                <>
+                                  <button 
+                                    onClick={() => handleOpenScormLessonModal(l)} 
+                                    className="px-3 py-1.5 text-sm bg-green-50 text-green-700 rounded hover:bg-green-100"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteLesson(l.id)} 
+                                    className="px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              ) : l.type === 'quiz' ? (
+                                <>
+                                  <button 
+                                    onClick={() => handleOpenQuizLessonModal(l)} 
+                                    className="px-3 py-1.5 text-sm bg-orange-50 text-orange-700 rounded hover:bg-orange-100"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteLesson(l.id)} 
+                                    className="px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => moveLesson(idx, 'up')} disabled={idx===0} className="px-2 py-1 text-sm bg-gray-100 text-gray-700 rounded disabled:opacity-40">↑</button>
+                                  <button onClick={() => moveLesson(idx, 'down')} disabled={idx===lessons.length-1} className="px-2 py-1 text-sm bg-gray-100 text-gray-700 rounded disabled:opacity-40">↓</button>
+                                  <button onClick={() => editLesson(idx)} className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100">Edit</button>
+                                  <button onClick={() => deleteLesson(idx)} className="px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100">Delete</button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -804,6 +992,62 @@ export default function AdminCourseEditor() {
         </div>
         )}
       </div>
+
+      {/* Video Lesson Modal */}
+      {!isNew && courseId && (
+        <VideoLessonModal
+          isOpen={videoLessonModalOpen}
+          onClose={() => {
+            setVideoLessonModalOpen(false);
+            setEditingVideoLesson(null);
+          }}
+          courseId={courseId}
+          lesson={editingVideoLesson}
+          onSave={handleVideoLessonSaved}
+        />
+      )}
+
+      {/* PDF Lesson Modal */}
+      {!isNew && courseId && (
+        <PdfLessonModal
+          isOpen={pdfLessonModalOpen}
+          onClose={() => {
+            setPdfLessonModalOpen(false);
+            setEditingPdfLesson(null);
+          }}
+          courseId={courseId}
+          lesson={editingPdfLesson}
+          onSave={handlePdfLessonSaved}
+        />
+      )}
+
+      {/* SCORM Lesson Modal */}
+      {!isNew && courseId && (
+        <ScormLessonModal
+          isOpen={scormLessonModalOpen}
+          onClose={() => {
+            setScormLessonModalOpen(false);
+            setEditingScormLesson(null);
+          }}
+          courseId={courseId}
+          lesson={editingScormLesson}
+          onSave={handleScormLessonSaved}
+        />
+      )}
+
+      {/* Quiz Lesson Modal */}
+      {!isNew && courseId && (
+        <QuizLessonModal
+          isOpen={quizLessonModalOpen}
+          onClose={() => {
+            setQuizLessonModalOpen(false);
+            setEditingQuizLesson(null);
+          }}
+          courseId={courseId}
+          lesson={editingQuizLesson}
+          onSave={handleQuizLessonSaved}
+        />
+      )}
     </div>
   );
 }
@@ -812,23 +1056,52 @@ export default function AdminCourseEditor() {
 function TypeBadge({ type }) {
   const map = {
     video: 'bg-blue-100 text-blue-800',
+    document: 'bg-purple-100 text-purple-800',
     pdf: 'bg-purple-100 text-purple-800',
     scorm: 'bg-green-100 text-green-800',
     quiz: 'bg-orange-100 text-orange-800'
   };
-  const label = type === 'scorm' ? 'SCORM' : type.charAt(0).toUpperCase() + type.slice(1);
+  const labelMap = {
+    document: 'PDF',
+    pdf: 'PDF',
+    scorm: 'SCORM'
+  };
+  const label = labelMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
   return <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${map[type] || 'bg-gray-100 text-gray-800'}`}>{label}</span>;
 }
 
 function AddLessonMenu({ onAdd }) {
   const [open, setOpen] = useState(false);
+  
+  const lessonTypes = [
+    { value: 'video', label: 'Video Lesson', icon: '🎥' },
+    { value: 'pdf', label: 'PDF Lesson', icon: '📄' },
+    { value: 'scorm', label: 'SCORM Package', icon: '📦' },
+    { value: 'quiz', label: 'Quiz', icon: '📝' }
+  ];
+  
   return (
     <div className="relative">
-      <button onClick={() => setOpen(v=>!v)} className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 cursor-pointer"> Add Lesson</button>
+      <button 
+        onClick={() => setOpen(v=>!v)} 
+        className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 cursor-pointer inline-flex items-center gap-2"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+        Add Lesson
+      </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-44 bg-white border rounded shadow z-10">
-          {['video','pdf','scorm','quiz'].map(t => (
-            <button key={t} onClick={() => { onAdd(t); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">{t === 'scorm' ? 'SCORM' : t.charAt(0).toUpperCase()+t.slice(1)}</button>
+        <div className="absolute right-0 mt-2 w-56 bg-white border rounded shadow-lg z-10">
+          {lessonTypes.map(t => (
+            <button 
+              key={t.value} 
+              onClick={() => { onAdd(t.value); setOpen(false); }} 
+              className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 flex items-center gap-3 border-b last:border-b-0"
+            >
+              <span className="text-lg">{t.icon}</span>
+              <span>{t.label}</span>
+            </button>
           ))}
         </div>
       )}

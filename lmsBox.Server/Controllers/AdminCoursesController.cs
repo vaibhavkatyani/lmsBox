@@ -510,6 +510,104 @@ public class AdminCoursesController : ControllerBase
     }
 
     /// <summary>
+    /// Publish or unpublish a course (change status)
+    /// </summary>
+    [HttpPut("{courseId}/status")]
+    public async Task<ActionResult> UpdateCourseStatus(string courseId, [FromBody] UpdateCourseStatusRequest request)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new { message = "User not authenticated" });
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+            {
+                return NotFound(new { message = "User not found" });
+            }
+
+            var course = await _context.Courses
+                .Include(c => c.Lessons)
+                .FirstOrDefaultAsync(c => c.Id == courseId);
+
+            if (course == null)
+            {
+                return NotFound(new { message = "Course not found" });
+            }
+
+            // Check organization access for OrgAdmin
+            if (userRole == "OrgAdmin" && course.OrganisationId != user.OrganisationID)
+            {
+                return Forbid("You can only update courses from your organization");
+            }
+
+            // Validate status value
+            var validStatuses = new[] { "Draft", "Published", "Archived" };
+            if (!validStatuses.Contains(request.Status))
+            {
+                return BadRequest(new { message = $"Invalid status. Valid values are: {string.Join(", ", validStatuses)}" });
+            }
+
+            // Validate course is ready for publishing
+            if (request.Status == "Published")
+            {
+                var validationErrors = new List<string>();
+
+                if (string.IsNullOrWhiteSpace(course.Title))
+                {
+                    validationErrors.Add("Course title is required");
+                }
+
+                if (string.IsNullOrWhiteSpace(course.Description) && string.IsNullOrWhiteSpace(course.ShortDescription))
+                {
+                    validationErrors.Add("Course description is required");
+                }
+
+                if (course.Lessons == null || !course.Lessons.Any())
+                {
+                    validationErrors.Add("Course must have at least one lesson before publishing");
+                }
+
+                if (validationErrors.Any())
+                {
+                    return BadRequest(new 
+                    { 
+                        message = "Course cannot be published. Please fix the following issues:", 
+                        errors = validationErrors 
+                    });
+                }
+            }
+
+            // Update status
+            var oldStatus = course.Status;
+            course.Status = request.Status;
+            course.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Course {CourseId} status changed from {OldStatus} to {NewStatus} by user {UserId}", 
+                courseId, oldStatus, request.Status, userId);
+
+            return Ok(new 
+            { 
+                message = $"Course status updated to {request.Status}",
+                status = request.Status,
+                courseId = courseId
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating course status for {CourseId}", courseId);
+            return StatusCode(500, new { message = "An error occurred while updating the course status" });
+        }
+    }
+
+    /// <summary>
     /// Delete a course
     /// </summary>
     [HttpDelete("{courseId}")]
@@ -633,6 +731,11 @@ public class UpdateCourseRequest : CreateCourseRequest
 {
     public string? Status { get; set; }
     public List<UpdateLessonDto>? Lessons { get; set; }
+}
+
+public class UpdateCourseStatusRequest
+{
+    public string Status { get; set; } = null!;
 }
 
 public class UpdateLessonDto

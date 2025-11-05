@@ -97,17 +97,31 @@ export default function AdminCourses() {
 
   const onEdit = (id) => navigate(`/admin/courses/${id}/edit`);
   
+  const handlePublishToggle = async (courseId) => {
+    const course = courses.find(c => c.id === courseId);
+    if (!course) return;
+    
+    const newStatus = course.status === 'Draft' ? 'Published' : 'Draft';
+    
+    try {
+      await adminCourseService.updateCourseStatus(courseId, newStatus);
+      toast.success(`Course ${newStatus.toLowerCase()} successfully`);
+      loadCourses(); // Reload the list
+    } catch (error) {
+      console.error('Error updating course status:', error);
+      const message = error.response?.data?.message || error.response?.data?.errors?.join(', ') || 'Failed to update course status';
+      toast.error(message);
+    }
+  };
+
   const onArchiveToggle = async (courseId) => {
     const course = courses.find(c => c.id === courseId);
     if (!course) return;
     
-    const newStatus = course.status === 'Archived' ? 'Active' : 'Archived';
+    const newStatus = course.status === 'Archived' ? 'Published' : 'Archived';
     try {
-      await adminCourseService.updateCourse(courseId, { 
-        ...courseHelpers.transformCourseFormToRequest(course),
-        status: newStatus 
-      });
-      toast.success(`Course ${newStatus.toLowerCase()} successfully`);
+      await adminCourseService.updateCourseStatus(courseId, newStatus);
+      toast.success(`Course ${newStatus === 'Archived' ? 'archived' : 'unarchived'} successfully`);
       loadCourses(); // Reload the list
     } catch (error) {
       console.error('Error updating course status:', error);
@@ -123,6 +137,7 @@ export default function AdminCourses() {
 
   const statusBadge = (s) => {
     const map = {
+      Published: 'bg-green-100 text-green-800',
       Active: 'bg-green-100 text-green-800',
       Draft: 'bg-gray-100 text-gray-800',
       Archived: 'bg-yellow-100 text-yellow-800'
@@ -174,7 +189,7 @@ export default function AdminCourses() {
                 <label className="text-sm text-gray-600">Status</label>
                 <select value={status} onChange={(e) => setStatus(e.target.value)} className="border rounded px-3 py-2">
                   <option value="all">All</option>
-                  <option value="active">Active</option>
+                  <option value="published">Published</option>
                   <option value="draft">Draft</option>
                   <option value="archived">Archived</option>
                 </select>
@@ -235,7 +250,43 @@ export default function AdminCourses() {
                       <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
                           <button onClick={() => onEdit(c.id)} className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100">Edit</button>
-                          <button onClick={() => onArchiveToggle(c.id)} className="px-3 py-1.5 text-sm bg-yellow-50 text-yellow-800 rounded hover:bg-yellow-100">{c.status === 'Archived' ? 'Unarchive' : 'Archive'}</button>
+                          
+                          {c.status === 'Draft' && (
+                            <button 
+                              onClick={() => handlePublishToggle(c.id)} 
+                              className="px-3 py-1.5 text-sm bg-green-50 text-green-700 rounded hover:bg-green-100"
+                            >
+                              Publish
+                            </button>
+                          )}
+                          
+                          {c.status === 'Published' && (
+                            <button 
+                              onClick={() => handlePublishToggle(c.id)} 
+                              className="px-3 py-1.5 text-sm bg-gray-50 text-gray-700 rounded hover:bg-gray-100"
+                            >
+                              Unpublish
+                            </button>
+                          )}
+                          
+                          {c.status !== 'Archived' && (
+                            <button 
+                              onClick={() => onArchiveToggle(c.id)} 
+                              className="px-3 py-1.5 text-sm bg-yellow-50 text-yellow-800 rounded hover:bg-yellow-100"
+                            >
+                              Archive
+                            </button>
+                          )}
+                          
+                          {c.status === 'Archived' && (
+                            <button 
+                              onClick={() => onArchiveToggle(c.id)} 
+                              className="px-3 py-1.5 text-sm bg-yellow-50 text-yellow-800 rounded hover:bg-yellow-100"
+                            >
+                              Unarchive
+                            </button>
+                          )}
+                          
                           <button onClick={() => onDelete(c)} className="px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100">Delete</button>
                         </div>
                       </td>
