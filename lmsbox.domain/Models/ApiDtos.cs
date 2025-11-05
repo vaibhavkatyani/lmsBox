@@ -60,6 +60,8 @@ namespace lmsbox.domain.Models
         public string Email { get; set; } = string.Empty;
 
         public string? Role { get; set; } = "Learner";
+        
+        public List<string>? GroupIds { get; set; }
     }
 
     public class UpdateUserRequest
@@ -77,6 +79,8 @@ namespace lmsbox.domain.Models
         public string Email { get; set; } = string.Empty;
 
         public string? Role { get; set; }
+        
+        public List<string>? GroupIds { get; set; }
     }
 
     // Course DTOs (learner-facing)

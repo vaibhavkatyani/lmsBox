@@ -98,25 +98,29 @@ export async function getUser(userId) {
 
 export async function saveUser(user, isEdit = false) {
   try {
+    const payload = {
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role || (isEdit ? undefined : 'Learner'),
+      groupIds: user.groupIds // Send learning pathway assignments
+    };
+    
+    console.log(`📤 ${isEdit ? 'Updating' : 'Creating'} user:`, payload);
+    
     if (isEdit) {
-      const response = await api.put(`/api/admin/users/${user.id}`, {
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role
-      });
+      const response = await api.put(`/api/admin/users/${user.id}`, payload);
+      console.log('✅ User updated successfully:', response.data);
       return response.data;
     } else {
-      const response = await api.post('/api/admin/users', {
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role || 'Learner'
-      });
+      const response = await api.post('/api/admin/users', payload);
+      console.log('✅ User created successfully:', response.data);
       return response.data;
     }
   } catch (error) {
-    console.error('Failed to save user:', error);
+    console.error('❌ Failed to save user:', error);
+    console.error('❌ Error response:', error.response?.data);
+    console.error('❌ Error status:', error.response?.status);
     
     // Don't modify the error, just throw it as-is so the component can handle it
     throw error;

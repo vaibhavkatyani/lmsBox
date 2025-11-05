@@ -114,6 +114,13 @@ namespace lmsBox.Server.Controllers
                 var userIds = users.Select(u => u.id).ToList();
                 var appUsers = await _userManager.Users.Where(u => userIds.Contains(u.Id)).ToListAsync();
                 
+                // Get learning pathway names for each user
+                var learnerGroupsData = await _context.LearnerGroups
+                    .Where(lg => userIds.Contains(lg.UserId) && lg.IsActive)
+                    .Include(lg => lg.LearningGroup)
+                    .Select(lg => new { lg.UserId, lg.LearningGroup!.Name })
+                    .ToListAsync();
+                
                 var usersWithRoles = new List<object>();
                 foreach (var user in users)
                 {
@@ -124,6 +131,12 @@ namespace lmsBox.Server.Controllers
                     // Apply role filter if specified
                     if (!string.IsNullOrWhiteSpace(role) && !roles.Any(r => r.Equals(role, StringComparison.OrdinalIgnoreCase)))
                         continue;
+
+                    // Get learning pathway names for this user
+                    var pathwayNames = learnerGroupsData
+                        .Where(lg => lg.UserId == user.id)
+                        .Select(lg => lg.Name)
+                        .ToList();
 
                     usersWithRoles.Add(new
                     {
@@ -136,7 +149,7 @@ namespace lmsBox.Server.Controllers
                         user.joinedDate,
                         role = primaryRole,
                         roles = roles.ToList(),
-                        groupNames = new List<string>() // TODO: Implement group lookup if needed
+                        learningPathways = pathwayNames
                     });
                 }
 
@@ -360,6 +373,28 @@ namespace lmsBox.Server.Controllers
 
                 _logger.LogInformation("User {UserId} created successfully by {AdminUser}", user.Id, User.Identity?.Name);
 
+                // Assign to learning pathways if provided
+                if (request.GroupIds != null && request.GroupIds.Any())
+                {
+                    _logger.LogInformation("Assigning user {UserId} to {Count} learning pathways", user.Id, request.GroupIds.Count);
+                    foreach (var groupIdStr in request.GroupIds)
+                    {
+                        if (long.TryParse(groupIdStr, out var groupId))
+                        {
+                            var newAssignment = new LearnerGroup
+                            {
+                                UserId = user.Id,
+                                LearningGroupId = groupId,
+                                JoinedAt = DateTime.UtcNow,
+                                IsActive = true
+                            };
+                            _context.LearnerGroups.Add(newAssignment);
+                        }
+                    }
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("Learning pathway assignments saved for user {UserId}", user.Id);
+                }
+
                 var message = emailStatus == "sent" 
                     ? "User created successfully and registration email sent" 
                     : "User created successfully but registration email failed to send";
@@ -418,6 +453,39 @@ namespace lmsBox.Server.Controllers
                         }
                         await _userManager.AddToRoleAsync(user, newRole);
                     }
+                }
+
+                // Update learning pathway assignments if provided
+                if (request.GroupIds != null)
+                {
+                    // Get existing active assignments
+                    var existingAssignments = await _context.LearnerGroups
+                        .Where(lg => lg.UserId == id && lg.IsActive)
+                        .ToListAsync();
+
+                    // Deactivate existing assignments
+                    foreach (var assignment in existingAssignments)
+                    {
+                        assignment.IsActive = false;
+                    }
+
+                    // Create new assignments
+                    foreach (var groupIdStr in request.GroupIds)
+                    {
+                        if (long.TryParse(groupIdStr, out var groupId))
+                        {
+                            var newAssignment = new LearnerGroup
+                            {
+                                UserId = id,
+                                LearningGroupId = groupId,
+                                JoinedAt = DateTime.UtcNow,
+                                IsActive = true
+                            };
+                            _context.LearnerGroups.Add(newAssignment);
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
                 }
 
                 _logger.LogInformation("User {UserId} updated successfully by {AdminUser}", user.Id, User.Identity?.Name);

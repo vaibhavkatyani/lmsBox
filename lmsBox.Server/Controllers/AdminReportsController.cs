@@ -76,7 +76,8 @@ public class AdminReportsController : ControllerBase
                     completedCourses = g.Count(lp => lp.Completed),
                     inProgressCourses = g.Count(lp => !lp.Completed && lp.ProgressPercent > 0),
                     avgProgress = g.Average(lp => (double?)lp.ProgressPercent) ?? 0,
-                    lastActivityDate = g.Max(lp => lp.CompletedAt) ?? DateTime.UtcNow
+                    lastActivityDate = g.Max(lp => lp.LastAccessedAt) ?? g.Max(lp => lp.CompletedAt) ?? DateTime.UtcNow,
+                    totalTimeSpentMinutes = g.Sum(lp => lp.TotalTimeSpentSeconds) / 60
                 })
                 .ToListAsync();
 
@@ -113,7 +114,9 @@ public class AdminReportsController : ControllerBase
                     enrollments = progress?.totalEnrollments ?? 0,
                     completions = progress?.completedCourses ?? 0,
                     inProgress = progress?.inProgressCourses ?? 0,
-                    averageProgress = progress != null ? Math.Round(progress.avgProgress, 2) : 0
+                    averageProgress = progress != null ? Math.Round(progress.avgProgress, 2) : 0,
+                    totalTimeSpentMinutes = progress?.totalTimeSpentMinutes ?? 0,
+                    totalTimeSpentHours = progress != null ? Math.Round(progress.totalTimeSpentMinutes / 60.0, 2) : 0
                 };
             }).OrderByDescending(u => u.engagementScore).ToList();
 
@@ -133,7 +136,9 @@ public class AdminReportsController : ControllerBase
                 averageEngagementScore = result.Any() ? Math.Round(result.Average(u => u.engagementScore), 2) : 0,
                 highlyEngagedUsers = result.Count(u => u.engagementScore >= 70),
                 moderatelyEngagedUsers = result.Count(u => u.engagementScore >= 40 && u.engagementScore < 70),
-                lowEngagementUsers = result.Count(u => u.engagementScore < 40)
+                lowEngagementUsers = result.Count(u => u.engagementScore < 40),
+                totalTimeSpentHours = result.Any() ? Math.Round(result.Sum(u => u.totalTimeSpentHours), 2) : 0,
+                averageTimeSpentPerUserHours = result.Any() ? Math.Round(result.Average(u => u.totalTimeSpentHours), 2) : 0
             };
 
             return Ok(new { users = result, summary });
@@ -192,7 +197,9 @@ public class AdminReportsController : ControllerBase
                     coursesCompleted = g.Count(lp => lp.Completed),
                     coursesInProgress = g.Count(lp => !lp.Completed && lp.ProgressPercent > 0),
                     overallProgress = g.Any() ? g.Average(lp => (double)lp.ProgressPercent) : 0,
-                    completedCourses = g.Where(lp => lp.Completed && lp.CompletedAt.HasValue).ToList()
+                    completedCourses = g.Where(lp => lp.Completed && lp.CompletedAt.HasValue).ToList(),
+                    totalTimeSpentSeconds = g.Sum(lp => lp.TotalTimeSpentSeconds),
+                    lastAccessedAt = g.Max(lp => lp.LastAccessedAt)
                 })
                 .ToList();
 
@@ -229,7 +236,11 @@ public class AdminReportsController : ControllerBase
                     coursesInProgress = progress?.coursesInProgress ?? 0,
                     overallProgress = progress != null ? Math.Round(progress.overallProgress, 2) : 0,
                     averageCompletionTime = avgCompletionTime,
-                    learningVelocity
+                    learningVelocity,
+                    totalTimeSpentMinutes = progress != null ? Math.Round(progress.totalTimeSpentSeconds / 60.0, 2) : 0,
+                    totalTimeSpentHours = progress != null ? Math.Round(progress.totalTimeSpentSeconds / 3600.0, 2) : 0,
+                    lastAccessedAt = progress?.lastAccessedAt,
+                    averageTimePerCourse = progress?.coursesEnrolled > 0 ? Math.Round(progress.totalTimeSpentSeconds / 60.0 / progress.coursesEnrolled, 2) : 0
                 };
             }).ToList();
 
@@ -240,7 +251,10 @@ public class AdminReportsController : ControllerBase
                 averageCompletionTime = result.Any() ? Math.Round(result.Average(r => r.averageCompletionTime), 2) : 0,
                 averageLearningVelocity = result.Any() ? Math.Round(result.Average(r => r.learningVelocity), 2) : 0,
                 totalEnrollments = result.Sum(r => r.coursesEnrolled),
-                totalCompletions = result.Sum(r => r.coursesCompleted)
+                totalCompletions = result.Sum(r => r.coursesCompleted),
+                totalTimeSpentHours = result.Any() ? Math.Round(result.Sum(r => r.totalTimeSpentHours), 2) : 0,
+                averageTimeSpentPerLearnerHours = result.Any() ? Math.Round(result.Average(r => r.totalTimeSpentHours), 2) : 0,
+                averageTimePerCourseMinutes = result.Any() ? Math.Round(result.Average(r => r.averageTimePerCourse), 2) : 0
             };
 
             return Ok(new { users = result, summary });
@@ -516,20 +530,20 @@ public class AdminReportsController : ControllerBase
             // Get all progress data for lessons
             var allProgressQuery = _context.LearnerProgresses
                 .AsNoTracking()
-                .Where(lp => lp.CourseId != null && lessons.Select(l => l.CourseId).Contains(lp.CourseId));
+                .Where(lp => lp.LessonId != null && lp.LessonId != null && lessonIds.Contains(lp.LessonId.Value));
 
             // Apply date filters
             if (startDate.HasValue)
-                allProgressQuery = allProgressQuery.Where(lp => lp.CompletedAt >= startDate.Value || lp.CompletedAt == null);
+                allProgressQuery = allProgressQuery.Where(lp => lp.LastAccessedAt >= startDate.Value || lp.CompletedAt >= startDate.Value || (lp.LastAccessedAt == null && lp.CompletedAt == null));
             if (endDate.HasValue)
-                allProgressQuery = allProgressQuery.Where(lp => lp.CompletedAt <= endDate.Value || lp.CompletedAt == null);
+                allProgressQuery = allProgressQuery.Where(lp => lp.LastAccessedAt <= endDate.Value || lp.CompletedAt <= endDate.Value || (lp.LastAccessedAt == null && lp.CompletedAt == null));
 
             var allProgress = await allProgressQuery.ToListAsync();
 
             // Calculate metrics per lesson
             var result = lessons.Select(l =>
             {
-                var lessonProgress = allProgress.Where(lp => lp.CourseId == l.CourseId).ToList();
+                var lessonProgress = allProgress.Where(lp => lp.LessonId == l.Id).ToList();
                 var totalEnrollments = lessonProgress.Count;
                 var completions = lessonProgress.Count(lp => lp.Completed);
                 var inProgress = lessonProgress.Count(lp => !lp.Completed && lp.ProgressPercent > 0);
@@ -542,6 +556,27 @@ public class AdminReportsController : ControllerBase
                 var avgProgress = lessonProgress.Any()
                     ? Math.Round(lessonProgress.Average(lp => lp.ProgressPercent), 2)
                     : 0;
+
+                // Calculate time spent metrics
+                var totalTimeSpentSeconds = lessonProgress.Sum(lp => lp.TotalTimeSpentSeconds);
+                var avgTimeSpentMinutes = totalEnrollments > 0
+                    ? Math.Round(totalTimeSpentSeconds / 60.0 / totalEnrollments, 2)
+                    : 0;
+
+                // Calculate video bookmark usage for video lessons
+                var videoBookmarkUsage = l.Type == "video" && totalEnrollments > 0
+                    ? Math.Round((lessonProgress.Count(lp => lp.VideoTimestamp.HasValue && lp.VideoTimestamp > 0) / (double)totalEnrollments) * 100, 2)
+                    : 0;
+
+                // Calculate last access recency
+                var lastAccessed = lessonProgress
+                    .Where(lp => lp.LastAccessedAt.HasValue)
+                    .OrderByDescending(lp => lp.LastAccessedAt)
+                    .FirstOrDefault()?.LastAccessedAt;
+
+                var daysSinceLastAccess = lastAccessed.HasValue 
+                    ? (DateTime.UtcNow - lastAccessed.Value).Days 
+                    : (int?)null;
 
                 // Calculate engagement level
                 string engagementLevel;
@@ -572,6 +607,11 @@ public class AdminReportsController : ControllerBase
                     notStarted,
                     completionRate,
                     averageProgress = avgProgress,
+                    totalTimeSpentHours = Math.Round(totalTimeSpentSeconds / 3600.0, 2),
+                    averageTimeSpentMinutes = avgTimeSpentMinutes,
+                    videoBookmarkUsagePercent = videoBookmarkUsage,
+                    lastAccessedAt = lastAccessed,
+                    daysSinceLastAccess,
                     engagementLevel,
                     difficulty,
                     isPopular = totalEnrollments > 10 && completionRate >= 60
@@ -586,7 +626,9 @@ public class AdminReportsController : ControllerBase
                     count = g.Count(),
                     totalEnrollments = g.Sum(l => l.totalEnrollments),
                     averageCompletionRate = g.Any() ? Math.Round(g.Average(l => l.completionRate), 2) : 0,
-                    averageProgress = g.Any() ? Math.Round(g.Average(l => l.averageProgress), 2) : 0
+                    averageProgress = g.Any() ? Math.Round(g.Average(l => l.averageProgress), 2) : 0,
+                    totalTimeSpentHours = g.Sum(l => l.totalTimeSpentHours),
+                    averageTimeSpentMinutes = g.Any() ? Math.Round(g.Average(l => l.averageTimeSpentMinutes), 2) : 0
                 })
                 .OrderByDescending(t => t.count)
                 .ToList();
@@ -622,9 +664,13 @@ public class AdminReportsController : ControllerBase
                 totalCompletions = result.Sum(l => l.completions),
                 averageCompletionRate = result.Any() ? Math.Round(result.Average(l => l.completionRate), 2) : 0,
                 averageProgress = result.Any() ? Math.Round(result.Average(l => l.averageProgress), 2) : 0,
+                totalTimeSpentHours = result.Sum(l => l.totalTimeSpentHours),
+                averageTimePerLessonMinutes = result.Any() ? Math.Round(result.Average(l => l.averageTimeSpentMinutes), 2) : 0,
                 mostPopularLesson = result.OrderByDescending(l => l.totalEnrollments).FirstOrDefault()?.lessonTitle ?? "N/A",
                 highestCompletionLesson = result.OrderByDescending(l => l.completionRate).FirstOrDefault()?.lessonTitle ?? "N/A",
                 lowestCompletionLesson = result.OrderBy(l => l.completionRate).FirstOrDefault()?.lessonTitle ?? "N/A",
+                mostTimeConsuming = result.OrderByDescending(l => l.averageTimeSpentMinutes).FirstOrDefault()?.lessonTitle ?? "N/A",
+                videoLessonsWithBookmarks = result.Count(l => l.lessonType == "video" && l.videoBookmarkUsagePercent > 0),
                 popularLessonsCount = popularLessons.Count,
                 problematicLessonsCount = problematicLessons.Count
             };
@@ -644,6 +690,169 @@ public class AdminReportsController : ControllerBase
         {
             _logger.LogError(ex, "Error generating lesson analytics report");
             return StatusCode(500, new { error = "Failed to generate lesson analytics report", details = ex.Message });
+        }
+    }
+
+    #endregion
+
+    #region Time Tracking & Engagement Analytics
+
+    [HttpGet("time-tracking")]
+    public async Task<IActionResult> GetTimeTrackingReport(
+        [FromQuery] string? userId,
+        [FromQuery] string? courseId,
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate)
+    {
+        try
+        {
+            var orgId = await GetOrgIdFilter();
+            var start = startDate ?? DateTime.UtcNow.AddMonths(-1);
+            var end = endDate ?? DateTime.UtcNow;
+
+            var progressQuery = _context.LearnerProgresses
+                .AsNoTracking()
+                .Include(lp => lp.User)
+                .Include(lp => lp.Course)
+                .Include(lp => lp.Lesson)
+                .Where(lp => lp.TotalTimeSpentSeconds > 0);
+
+            // Apply filters
+            if (!string.IsNullOrEmpty(userId))
+                progressQuery = progressQuery.Where(lp => lp.UserId == userId);
+
+            if (!string.IsNullOrEmpty(courseId))
+                progressQuery = progressQuery.Where(lp => lp.CourseId == courseId);
+
+            if (orgId.HasValue)
+                progressQuery = progressQuery.Where(lp => lp.Course!.OrganisationId == orgId);
+
+            // Filter by last accessed date
+            progressQuery = progressQuery.Where(lp => 
+                lp.LastAccessedAt.HasValue && lp.LastAccessedAt.Value >= start && lp.LastAccessedAt.Value <= end);
+
+            var progressData = await progressQuery.ToListAsync();
+
+            // Group by user for user-level analytics
+            var userTimeAnalytics = progressData
+                .GroupBy(lp => new { lp.UserId, lp.User!.FirstName, lp.User.LastName, lp.User.Email })
+                .Select(g => new
+                {
+                    userId = g.Key.UserId,
+                    userName = $"{g.Key.FirstName} {g.Key.LastName}",
+                    email = g.Key.Email,
+                    totalTimeSpentHours = Math.Round(g.Sum(lp => lp.TotalTimeSpentSeconds) / 3600.0, 2),
+                    coursesAccessed = g.Select(lp => lp.CourseId).Distinct().Count(),
+                    lessonsAccessed = g.Count(lp => lp.LessonId != null),
+                    lastActivityDate = g.Max(lp => lp.LastAccessedAt),
+                    averageSessionMinutes = g.Any() ? Math.Round(g.Average(lp => lp.TotalTimeSpentSeconds) / 60.0, 2) : 0,
+                    activeDays = g.Where(lp => lp.LastAccessedAt.HasValue)
+                               .Select(lp => lp.LastAccessedAt!.Value.Date)
+                               .Distinct()
+                               .Count()
+                })
+                .OrderByDescending(u => u.totalTimeSpentHours)
+                .ToList();
+
+            // Group by course for course-level analytics
+            var courseTimeAnalytics = progressData
+                .Where(lp => lp.CourseId != null)
+                .GroupBy(lp => new { lp.CourseId, lp.Course!.Title })
+                .Select(g => new
+                {
+                    courseId = g.Key.CourseId,
+                    courseTitle = g.Key.Title,
+                    totalTimeSpentHours = Math.Round(g.Sum(lp => lp.TotalTimeSpentSeconds) / 3600.0, 2),
+                    uniqueLearners = g.Select(lp => lp.UserId).Distinct().Count(),
+                    averageTimePerLearnerMinutes = g.Any() ? 
+                        Math.Round(g.Sum(lp => lp.TotalTimeSpentSeconds) / 60.0 / g.Select(lp => lp.UserId).Distinct().Count(), 2) : 0,
+                    totalLessons = g.Count(lp => lp.LessonId != null),
+                    completedLessons = g.Count(lp => lp.LessonId != null && lp.Completed)
+                })
+                .OrderByDescending(c => c.totalTimeSpentHours)
+                .ToList();
+
+            // Group by lesson for lesson-level analytics
+            var lessonTimeAnalytics = progressData
+                .Where(lp => lp.LessonId != null)
+                .GroupBy(lp => new { lp.LessonId, LessonTitle = lp.Lesson!.Title, lp.Lesson.Type, lp.CourseId, CourseTitle = lp.Course!.Title })
+                .Select(g => new
+                {
+                    lessonId = g.Key.LessonId,
+                    lessonTitle = g.Key.LessonTitle,
+                    lessonType = g.Key.Type ?? "Unknown",
+                    courseId = g.Key.CourseId,
+                    courseTitle = g.Key.CourseTitle,
+                    totalTimeSpentHours = Math.Round(g.Sum(lp => lp.TotalTimeSpentSeconds) / 3600.0, 2),
+                    uniqueLearners = g.Select(lp => lp.UserId).Distinct().Count(),
+                    averageTimePerLearnerMinutes = g.Any() ? 
+                        Math.Round(g.Sum(lp => lp.TotalTimeSpentSeconds) / 60.0 / g.Select(lp => lp.UserId).Distinct().Count(), 2) : 0,
+                    completions = g.Count(lp => lp.Completed),
+                    completionRate = g.Any() ? Math.Round((g.Count(lp => lp.Completed) / (double)g.Count()) * 100, 2) : 0,
+                    videoBookmarkCount = g.Count(lp => lp.VideoTimestamp.HasValue && lp.VideoTimestamp > 0),
+                    lastAccessedAt = g.Max(lp => lp.LastAccessedAt)
+                })
+                .OrderByDescending(l => l.totalTimeSpentHours)
+                .ToList();
+
+            // Daily time spent breakdown
+            var dailyTimeBreakdown = progressData
+                .Where(lp => lp.LastAccessedAt.HasValue)
+                .GroupBy(lp => lp.LastAccessedAt!.Value.Date)
+                .Select(g => new
+                {
+                    date = g.Key,
+                    totalTimeSpentHours = Math.Round(g.Sum(lp => lp.TotalTimeSpentSeconds) / 3600.0, 2),
+                    uniqueLearners = g.Select(lp => lp.UserId).Distinct().Count(),
+                    lessonsAccessed = g.Count(lp => lp.LessonId != null),
+                    coursesAccessed = g.Select(lp => lp.CourseId).Distinct().Count()
+                })
+                .OrderBy(d => d.date)
+                .ToList();
+
+            // Time by lesson type
+            var timeByLessonType = progressData
+                .Where(lp => lp.LessonId != null && lp.Lesson != null)
+                .GroupBy(lp => lp.Lesson!.Type ?? "Unknown")
+                .Select(g => new
+                {
+                    lessonType = g.Key,
+                    totalTimeSpentHours = Math.Round(g.Sum(lp => lp.TotalTimeSpentSeconds) / 3600.0, 2),
+                    lessonCount = g.Select(lp => lp.LessonId).Distinct().Count(),
+                    averageTimePerLessonMinutes = g.Any() ? 
+                        Math.Round(g.Sum(lp => lp.TotalTimeSpentSeconds) / 60.0 / g.Select(lp => lp.LessonId).Distinct().Count(), 2) : 0
+                })
+                .OrderByDescending(t => t.totalTimeSpentHours)
+                .ToList();
+
+            var summary = new
+            {
+                totalTimeSpentHours = Math.Round(progressData.Sum(lp => lp.TotalTimeSpentSeconds) / 3600.0, 2),
+                totalUniqueLearners = progressData.Select(lp => lp.UserId).Distinct().Count(),
+                totalCoursesAccessed = progressData.Select(lp => lp.CourseId).Distinct().Count(),
+                totalLessonsAccessed = progressData.Count(lp => lp.LessonId != null),
+                averageTimePerLearnerHours = userTimeAnalytics.Any() ? Math.Round(userTimeAnalytics.Average(u => u.totalTimeSpentHours), 2) : 0,
+                averageTimePerCourseHours = courseTimeAnalytics.Any() ? Math.Round(courseTimeAnalytics.Average(c => c.totalTimeSpentHours), 2) : 0,
+                averageTimePerLessonMinutes = lessonTimeAnalytics.Any() ? Math.Round(lessonTimeAnalytics.Average(l => l.averageTimePerLearnerMinutes), 2) : 0,
+                mostActiveDay = dailyTimeBreakdown.OrderByDescending(d => d.totalTimeSpentHours).FirstOrDefault()?.date.ToString("yyyy-MM-dd") ?? "N/A",
+                mostTimeConsuming = courseTimeAnalytics.OrderByDescending(c => c.totalTimeSpentHours).FirstOrDefault()?.courseTitle ?? "N/A",
+                peakActivityHours = Math.Round(dailyTimeBreakdown.OrderByDescending(d => d.totalTimeSpentHours).FirstOrDefault()?.totalTimeSpentHours ?? 0, 2)
+            };
+
+            return Ok(new
+            {
+                summary,
+                userTimeAnalytics,
+                courseTimeAnalytics,
+                lessonTimeAnalytics = lessonTimeAnalytics.Take(20).ToList(), // Top 20 lessons
+                dailyTimeBreakdown,
+                timeByLessonType
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating time tracking report");
+            return StatusCode(500, new { error = "Failed to generate time tracking report", details = ex.Message });
         }
     }
 

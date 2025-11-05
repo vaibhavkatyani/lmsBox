@@ -72,6 +72,15 @@ export default function AdminReports() {
       color: 'bg-yellow-500'
     },
     {
+      id: 'time-tracking',
+      name: 'Time Tracking & Engagement',
+      description: 'Detailed time spent analytics by users, courses, and lessons with engagement metrics',
+      category: 'users',
+      icon: ClockIcon,
+      path: '/admin/reports/time-tracking',
+      color: 'bg-rose-500'
+    },
+    {
       id: 'pathway-progress',
       name: 'Pathway Progress Report',
       description: 'Track completion rates and time spent on learning pathways',

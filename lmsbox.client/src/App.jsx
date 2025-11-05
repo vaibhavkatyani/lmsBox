@@ -20,6 +20,7 @@ import UserProgressReport from './pages/UserProgressReport';
 import CourseEnrollmentReport from './pages/CourseEnrollmentReport';
 import CourseCompletionReport from './pages/CourseCompletionReport';
 import LessonAnalyticsReport from './pages/LessonAnalyticsReport';
+import TimeTrackingReport from './pages/TimeTrackingReport';
 import ContentUsageReport from './pages/ContentUsageReport';
 import PathwayProgressReport from './pages/PathwayProgressReport';
 import PathwayAssignmentsReport from './pages/PathwayAssignmentsReport';
@@ -169,6 +170,14 @@ function App() {
             element={
               <AdminRoute>
                 <LessonAnalyticsReport />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/reports/time-tracking"
+            element={
+              <AdminRoute>
+                <TimeTrackingReport />
               </AdminRoute>
             }
           />

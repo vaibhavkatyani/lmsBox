@@ -140,11 +140,14 @@ export default function AdminUserEditor() {
       // Convert learningPathways back to groupIds for the API
       const payload = { 
         id: userId, 
-        ...form,
-        groupIds: form.learningPathways.map(p => p.id)
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        role: form.role,
+        groupIds: form.learningPathways.map(p => String(p.id))
       };
-      // Remove learningPathways from payload as backend expects groupIds
-      delete payload.learningPathways;
+      
+      console.log('💾 Saving user with payload:', payload);
       
       const response = await saveUser(payload, !isNew);
       

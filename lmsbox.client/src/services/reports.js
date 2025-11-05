@@ -60,6 +60,19 @@ export async function getLessonAnalyticsReport(params = {}) {
   return res.data;
 }
 
+export async function getTimeTrackingReport(params = {}) {
+  const { userId, courseId, startDate, endDate } = params;
+  const queryParams = new URLSearchParams();
+  
+  if (userId) queryParams.append('userId', userId);
+  if (courseId) queryParams.append('courseId', courseId);
+  if (startDate) queryParams.append('startDate', startDate);
+  if (endDate) queryParams.append('endDate', endDate);
+  
+  const res = await api.get(`/api/admin/reports/time-tracking?${queryParams}`);
+  return res.data;
+}
+
 // Learning Pathway Reports
 export async function getPathwayProgressReport(startDate, endDate, activeOnly) {
   const queryParams = new URLSearchParams();

@@ -203,7 +203,7 @@ export default function AdminUsers() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Groups</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Learning Pathways</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined On</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -241,16 +241,16 @@ export default function AdminUsers() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-700">
-                          {u.groupNames && u.groupNames.length > 0 ? (
+                          {u.learningPathways && u.learningPathways.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
-                              {u.groupNames.map((name, idx) => (
-                                <span key={idx} className="inline-block bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">
+                              {u.learningPathways.map((name, idx) => (
+                                <span key={idx} className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">
                                   {name}
                                 </span>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-gray-400 italic">No groups</span>
+                            <span className="text-gray-400 italic">No pathways</span>
                           )}
                         </div>
                       </td>

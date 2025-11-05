@@ -24,4 +24,16 @@ public class LearnerProgress
     public bool Completed { get; set; }
 
     public DateTime? CompletedAt { get; set; }
+
+    // Video bookmark timestamp in seconds
+    public int? VideoTimestamp { get; set; }
+
+    // Last accessed timestamp for resuming
+    public DateTime? LastAccessedAt { get; set; }
+
+    // Time tracking for analytics (in seconds)
+    public int TotalTimeSpentSeconds { get; set; } = 0;
+    
+    // Current session tracking
+    public DateTime? SessionStartTime { get; set; }
 }
