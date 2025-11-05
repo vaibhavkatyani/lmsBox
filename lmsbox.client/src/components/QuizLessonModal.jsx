@@ -240,22 +240,6 @@ export default function QuizLessonModal({ isOpen, onClose, courseId, lesson, onS
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Lesson Order
-                    </label>
-                    <input
-                      type="number"
-                      name="ordinal"
-                      value={formData.ordinal}
-                      onChange={handleInputChange}
-                      min="1"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                </div>
-
                 <div className="flex items-center">
                   <input
                     type="checkbox"

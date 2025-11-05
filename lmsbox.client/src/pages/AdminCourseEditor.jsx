@@ -123,6 +123,10 @@ export default function AdminCourseEditor() {
   const [quizLessonModalOpen, setQuizLessonModalOpen] = useState(false);
   const [editingQuizLesson, setEditingQuizLesson] = useState(null);
   
+  // Drag and drop state
+  const [draggedLesson, setDraggedLesson] = useState(null);
+  const [draggedOverLesson, setDraggedOverLesson] = useState(null);
+  
   // Quiz picker state (old - can be removed after migration)
   const [quizPickerOpen, setQuizPickerOpen] = useState(false);
   const [quizSearch, setQuizSearch] = useState('');
@@ -286,6 +290,63 @@ export default function AdminCourseEditor() {
       console.error('Error deleting lesson:', error);
       toast.error('Failed to delete lesson');
     }
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (e, lesson, index) => {
+    setDraggedLesson({ lesson, index });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', e.currentTarget);
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDraggedOverLesson(index);
+  };
+
+  const handleDragLeave = () => {
+    setDraggedOverLesson(null);
+  };
+
+  const handleDrop = async (e, dropIndex) => {
+    e.preventDefault();
+    setDraggedOverLesson(null);
+
+    if (!draggedLesson || draggedLesson.index === dropIndex) {
+      setDraggedLesson(null);
+      return;
+    }
+
+    const dragIndex = draggedLesson.index;
+    const newLessons = [...lessons];
+    const [removed] = newLessons.splice(dragIndex, 1);
+    newLessons.splice(dropIndex, 0, removed);
+
+    // Update local state immediately for instant feedback
+    setLessons(newLessons);
+    setDraggedLesson(null);
+
+    // Save new order to backend
+    try {
+      const lessonOrders = newLessons.map((lesson, idx) => ({
+        lessonId: lesson.id,
+        ordinal: idx + 1
+      }));
+
+      await lessonsService.reorderLessons(courseId, lessonOrders);
+      toast.success('Lesson order updated');
+    } catch (error) {
+      console.error('Error reordering lessons:', error);
+      toast.error('Failed to save lesson order');
+      // Reload lessons to revert to server state
+      loadLessons();
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedLesson(null);
+    setDraggedOverLesson(null);
   };
   
   const newId = () => 'l' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
@@ -575,28 +636,22 @@ export default function AdminCourseEditor() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-gray-900">Lessons</h2>
                 <div className="flex items-center gap-2">
-                  {!isNew && courseId && (
-                    <AddLessonMenu 
-                      onAdd={(type) => {
-                        if (type === 'video') {
-                          handleOpenVideoLessonModal();
-                        } else if (type === 'pdf' || type === 'document') {
-                          handleOpenPdfLessonModal();
-                        } else if (type === 'scorm') {
-                          handleOpenScormLessonModal();
-                        } else if (type === 'quiz') {
-                          handleOpenQuizLessonModal();
-                        } else {
-                          startAddLesson(type);
-                        }
-                      }} 
-                    />
-                  )}
-                  {isNew && (
-                    <AddLessonMenu onAdd={(type) => {
-                      startAddLesson(type);
-                    }} />
-                  )}
+                  <AddLessonMenu 
+                    disabled={isNew}
+                    onAdd={(type) => {
+                      if (type === 'video') {
+                        handleOpenVideoLessonModal();
+                      } else if (type === 'pdf' || type === 'document') {
+                        handleOpenPdfLessonModal();
+                      } else if (type === 'scorm') {
+                        handleOpenScormLessonModal();
+                      } else if (type === 'quiz') {
+                        handleOpenQuizLessonModal();
+                      } else {
+                        startAddLesson(type);
+                      }
+                    }} 
+                  />
                 </div>
               </div>
 
@@ -611,7 +666,7 @@ export default function AdminCourseEditor() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">Drag</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Optional</th>
@@ -625,8 +680,25 @@ export default function AdminCourseEditor() {
                       </tr>
                     ) : (
                       lessons.map((l, idx) => (
-                        <tr key={l.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 w-20">{l.ordinal || idx + 1}</td>
+                        <tr 
+                          key={l.id} 
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, l, idx)}
+                          onDragOver={(e) => handleDragOver(e, idx)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, idx)}
+                          onDragEnd={handleDragEnd}
+                          className={`hover:bg-gray-50 cursor-move transition-colors ${
+                            draggedOverLesson === idx && draggedLesson?.index !== idx
+                              ? 'bg-blue-50 border-t-2 border-blue-400' 
+                              : ''
+                          } ${draggedLesson?.index === idx ? 'opacity-50' : ''}`}
+                        >
+                          <td className="px-4 py-3 text-gray-400">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                            </svg>
+                          </td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-gray-900">{l.title || <span className="text-gray-400">Untitled</span>}</div>
                             {l.content && (
@@ -925,11 +997,22 @@ export default function AdminCourseEditor() {
           {/* Quizzes Tab */}
           {activeTab === 'quizzes' && (
             <div className="p-6">
+              {isNew && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800 mb-6">
+                  <strong>Note:</strong> Please save the course first before adding quizzes.
+                </div>
+              )}
+              
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">Course Quizzes</h2>
                 <button
                   onClick={() => navigate(`/admin/quiz/create/${courseId}`)}
-                  className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 cursor-pointer"
+                  disabled={isNew}
+                  className={`px-4 py-2 rounded ${
+                    isNew 
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                      : 'bg-boxlms-primary-btn text-boxlms-primary-btn-txt hover:brightness-90 cursor-pointer'
+                  }`}
                 >
                   Create New Quiz
                 </button>
@@ -944,7 +1027,12 @@ export default function AdminCourseEditor() {
                   <div className="text-gray-500 mb-4">No quizzes created for this course yet.</div>
                   <button
                     onClick={() => navigate(`/admin/quiz/create/${courseId}`)}
-                    className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 cursor-pointer"
+                    disabled={isNew}
+                    className={`px-4 py-2 rounded ${
+                      isNew 
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                        : 'bg-boxlms-primary-btn text-boxlms-primary-btn-txt hover:brightness-90 cursor-pointer'
+                    }`}
                   >
                     Create First Quiz
                   </button>
@@ -1070,7 +1158,7 @@ function TypeBadge({ type }) {
   return <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${map[type] || 'bg-gray-100 text-gray-800'}`}>{label}</span>;
 }
 
-function AddLessonMenu({ onAdd }) {
+function AddLessonMenu({ onAdd, disabled = false }) {
   const [open, setOpen] = useState(false);
   
   const lessonTypes = [
@@ -1083,8 +1171,13 @@ function AddLessonMenu({ onAdd }) {
   return (
     <div className="relative">
       <button 
-        onClick={() => setOpen(v=>!v)} 
-        className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 cursor-pointer inline-flex items-center gap-2"
+        onClick={() => !disabled && setOpen(v=>!v)} 
+        disabled={disabled}
+        className={`px-4 py-2 rounded inline-flex items-center gap-2 ${
+          disabled 
+            ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+            : 'bg-boxlms-primary-btn text-boxlms-primary-btn-txt hover:brightness-90 cursor-pointer'
+        }`}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

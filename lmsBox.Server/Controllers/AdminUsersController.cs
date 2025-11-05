@@ -178,6 +178,17 @@ namespace lmsBox.Server.Controllers
                 var roles = await _userManager.GetRolesAsync(user);
                 var primaryRole = roles.FirstOrDefault() ?? "Learner";
 
+                // Get learning pathway assignments with names
+                var learnerGroups = await _context.LearnerGroups
+                    .Where(lg => lg.UserId == id && lg.IsActive)
+                    .Include(lg => lg.LearningGroup)
+                    .Select(lg => new
+                    {
+                        id = lg.LearningGroupId.ToString(),
+                        name = lg.LearningGroup!.Name
+                    })
+                    .ToListAsync();
+
                 var result = new
                 {
                     id = user.Id,
@@ -186,7 +197,7 @@ namespace lmsBox.Server.Controllers
                     email = user.Email,
                     role = primaryRole,
                     status = user.EmailConfirmed ? "Active" : "Pending",
-                    groupIds = new List<string>() // TODO: Implement group lookup if needed
+                    learningPathways = learnerGroups
                 };
 
                 return Ok(result);
