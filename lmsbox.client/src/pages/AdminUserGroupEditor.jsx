@@ -72,7 +72,13 @@ export default function AdminUserGroupEditor() {
     setCourseLoading(true);
     try {
       const items = await listCoursesForMapping('');
-      setCourseOptions(items);
+      console.log('📚 Loaded courses for mapping:', items);
+      console.log('📊 Total courses returned:', items.length);
+      // Filter out already assigned courses (with string conversion for comparison)
+      const assignedIds = (form.courseIds || []).map(id => String(id));
+      const availableCourses = items.filter(item => !assignedIds.includes(String(item.id)));
+      console.log('✅ Available courses after filtering:', availableCourses.length);
+      setCourseOptions(availableCourses);
     } catch (e) {
       console.error(e);
       setCourseOptions([]);
@@ -86,7 +92,10 @@ export default function AdminUserGroupEditor() {
     setCourseLoading(true);
     try {
       const items = await listCoursesForMapping(term);
-      setCourseOptions(items);
+      // Filter out already assigned courses (with string conversion for comparison)
+      const assignedIds = (form.courseIds || []).map(id => String(id));
+      const availableCourses = items.filter(item => !assignedIds.includes(String(item.id)));
+      setCourseOptions(availableCourses);
     } catch (e) {
       console.error(e);
       setCourseOptions([]);
@@ -121,7 +130,10 @@ export default function AdminUserGroupEditor() {
     setUserLoading(true);
     try {
       const items = await listUsers('');
-      setUserOptions(items);
+      // Filter out already assigned users (with string conversion for comparison)
+      const assignedIds = (form.userIds || []).map(id => String(id));
+      const availableUsers = items.filter(item => !assignedIds.includes(String(item.id)));
+      setUserOptions(availableUsers);
     } catch (e) {
       console.error(e);
       setUserOptions([]);
@@ -135,7 +147,10 @@ export default function AdminUserGroupEditor() {
     setUserLoading(true);
     try {
       const items = await listUsers(term);
-      setUserOptions(items);
+      // Filter out already assigned users (with string conversion for comparison)
+      const assignedIds = (form.userIds || []).map(id => String(id));
+      const availableUsers = items.filter(item => !assignedIds.includes(String(item.id)));
+      setUserOptions(availableUsers);
     } catch (e) {
       console.error(e);
       setUserOptions([]);
@@ -254,11 +269,22 @@ export default function AdminUserGroupEditor() {
           {/* Courses Tab */}
           {tab === 'courses' && (
             <div className="p-6 space-y-4">
+              {isNew && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800 mb-4">
+                  <strong>Note:</strong> Please save the learning pathway first before adding courses.
+                </div>
+              )}
+              
               <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-600">Assign courses that all users in this pathway can access.</p>
+                <p className="text-sm text-gray-600">Assign courses that all users in this pathway can access. Only published courses are available.</p>
                 <button
                   onClick={openCoursePicker}
-                  className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 cursor-pointer"
+                  disabled={isNew}
+                  className={`px-4 py-2 rounded ${
+                    isNew 
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                      : 'bg-boxlms-primary-btn text-boxlms-primary-btn-txt hover:brightness-90 cursor-pointer'
+                  }`}
                 >
                   Add Courses
                 </button>
@@ -301,14 +327,19 @@ export default function AdminUserGroupEditor() {
                   {courseLoading ? (
                     <div className="text-sm text-gray-500">Loading...</div>
                   ) : courseOptions.length === 0 ? (
-                    <div className="text-sm text-gray-500">No courses found.</div>
+                    <div className="text-sm text-gray-500">No published courses found.</div>
                   ) : (
                     <ul className="divide-y max-h-60 overflow-y-auto">
                       {courseOptions.map((c) => (
                         <li key={c.id} className="py-2 flex items-center justify-between">
-                          <div>
-                            <div className="text-sm text-gray-900">{c.title}</div>
-                            <div className="text-xs text-gray-500">{c.id}</div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm text-gray-900">{c.title}</div>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                Published
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500">{c.category || 'Uncategorized'}</div>
                           </div>
                           <button
                             onClick={() => toggleCourse(c.id)}
@@ -332,11 +363,22 @@ export default function AdminUserGroupEditor() {
           {/* Users Tab */}
           {tab === 'users' && (
             <div className="p-6 space-y-4">
+              {isNew && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800 mb-4">
+                  <strong>Note:</strong> Please save the learning pathway first before adding users.
+                </div>
+              )}
+              
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">Assign users to this pathway.</p>
                 <button
                   onClick={openUserPicker}
-                  className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 cursor-pointer"
+                  disabled={isNew}
+                  className={`px-4 py-2 rounded ${
+                    isNew 
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                      : 'bg-boxlms-primary-btn text-boxlms-primary-btn-txt hover:brightness-90 cursor-pointer'
+                  }`}
                 >
                   Add Users
                 </button>

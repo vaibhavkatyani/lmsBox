@@ -50,6 +50,12 @@ export const adminCourseService = {
   async deleteCourse(courseId) {
     const response = await api.delete(`/api/admin/courses/${courseId}`);
     return response.data;
+  },
+
+  // Update course status (publish/unpublish/archive)
+  async updateCourseStatus(courseId, status) {
+    const response = await api.put(`/api/admin/courses/${courseId}/status`, { status });
+    return response.data;
   }
 };
 

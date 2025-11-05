@@ -178,6 +178,17 @@ namespace lmsBox.Server.Controllers
                 var roles = await _userManager.GetRolesAsync(user);
                 var primaryRole = roles.FirstOrDefault() ?? "Learner";
 
+                // Get learning pathway assignments with names
+                var learnerGroups = await _context.LearnerGroups
+                    .Where(lg => lg.UserId == id && lg.IsActive)
+                    .Include(lg => lg.LearningGroup)
+                    .Select(lg => new
+                    {
+                        id = lg.LearningGroupId.ToString(),
+                        name = lg.LearningGroup!.Name
+                    })
+                    .ToListAsync();
+
                 var result = new
                 {
                     id = user.Id,
@@ -186,7 +197,7 @@ namespace lmsBox.Server.Controllers
                     email = user.Email,
                     role = primaryRole,
                     status = user.EmailConfirmed ? "Active" : "Pending",
-                    groupIds = new List<string>() // TODO: Implement group lookup if needed
+                    learningPathways = learnerGroups
                 };
 
                 return Ok(result);
@@ -464,39 +475,5 @@ namespace lmsBox.Server.Controllers
             return new string(Enumerable.Repeat(chars, 12)
                 .Select(s => s[random.Next(s.Length)]).ToArray());
         }
-    }
-
-    public class CreateUserRequest
-    {
-        [Required]
-        [StringLength(100)]
-        public string FirstName { get; set; } = string.Empty;
-
-        [Required]
-        [StringLength(100)]
-        public string LastName { get; set; } = string.Empty;
-
-        [Required]
-        [EmailAddress]
-        public string Email { get; set; } = string.Empty;
-
-        public string? Role { get; set; } = "Learner";
-    }
-
-    public class UpdateUserRequest
-    {
-        [Required]
-        [StringLength(100)]
-        public string FirstName { get; set; } = string.Empty;
-
-        [Required]
-        [StringLength(100)]
-        public string LastName { get; set; } = string.Empty;
-
-        [Required]
-        [EmailAddress]
-        public string Email { get; set; } = string.Empty;
-
-        public string? Role { get; set; }
     }
 }

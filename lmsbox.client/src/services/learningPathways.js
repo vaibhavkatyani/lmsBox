@@ -184,18 +184,31 @@ export async function listUsers(search = '', page = 1, pageSize = 50) {
   }
 }
 
-// For selecting courses to map to group (reuse existing courses if available)
+// For selecting courses to map to group (only show published courses)
 export async function listCoursesForMapping(search = '') {
   const params = new URLSearchParams();
   if (search?.trim()) {
     params.append('search', search.trim());
   }
+  // Only show published courses for pathway mapping
+  params.append('status', 'published');
+  params.append('pageSize', '100'); // Get more courses for selection
+  
+  console.log('🔍 Fetching courses with params:', params.toString());
   
   try {
     const response = await api.get(`/api/admin/courses?${params.toString()}`);
     const data = response.data;
-    return Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
-  } catch {
+    console.log('📦 API Response:', data);
+    // Handle both response formats: {items: [...]} and {courses: [...]}
+    const courses = Array.isArray(data?.items) ? data.items : 
+                    Array.isArray(data?.courses) ? data.courses :
+                    Array.isArray(data) ? data : [];
+    console.log('✅ Parsed courses:', courses);
+    return courses;
+  } catch (error) {
+    console.error('❌ Error fetching courses:', error);
+    return [];
     const mock = [
       { id: 'c1', title: 'Cyber Security Essentials', category: 'Security' },
       { id: 'c2', title: 'GDPR Compliance', category: 'Compliance' },

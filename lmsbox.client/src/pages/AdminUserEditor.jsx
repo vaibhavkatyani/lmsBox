@@ -17,7 +17,7 @@ export default function AdminUserEditor() {
     firstName: '',
     lastName: '',
     email: '',
-    groupIds: [],
+    learningPathways: [], // Changed from groupIds to learningPathways (array of {id, name})
     role: 'Learner',
     status: 'Active'
   });
@@ -39,7 +39,7 @@ export default function AdminUserEditor() {
             firstName: u.firstName || '',
             lastName: u.lastName || '',
             email: u.email || '',
-            groupIds: u.groupIds || [],
+            learningPathways: u.learningPathways || [],
             role: u.role || 'Learner',
             status: u.status || 'Active'
           });
@@ -81,7 +81,13 @@ export default function AdminUserEditor() {
     setGroupLoading(true);
     try {
       const result = await listUserGroups({ search: '' });
-      setGroupOptions(result.items || []);
+      // Filter out already assigned pathways
+      const assignedIds = form.learningPathways.map(p => String(p.id));
+      console.log('🔍 Assigned pathway IDs:', assignedIds);
+      console.log('📦 All pathways from API:', result.items);
+      const availablePathways = (result.items || []).filter(item => !assignedIds.includes(String(item.id)));
+      console.log('✅ Available pathways after filtering:', availablePathways);
+      setGroupOptions(availablePathways);
     } catch (e) {
       console.error(e);
       setGroupOptions([]);
@@ -95,7 +101,10 @@ export default function AdminUserEditor() {
     setGroupLoading(true);
     try {
       const result = await listUserGroups({ search: term });
-      setGroupOptions(result.items || []);
+      // Filter out already assigned pathways
+      const assignedIds = form.learningPathways.map(p => String(p.id));
+      const availablePathways = (result.items || []).filter(item => !assignedIds.includes(String(item.id)));
+      setGroupOptions(availablePathways);
     } catch (e) {
       console.error(e);
       setGroupOptions([]);
@@ -104,10 +113,16 @@ export default function AdminUserEditor() {
     }
   };
 
-  const toggleGroup = (gId) => {
+  const toggleGroup = (gId, gName = null) => {
     setForm((prev) => {
-      const has = prev.groupIds.includes(gId);
-      return { ...prev, groupIds: has ? prev.groupIds.filter((id) => id !== gId) : [...prev.groupIds, gId] };
+      const has = prev.learningPathways.some(p => p.id === gId);
+      if (has) {
+        return { ...prev, learningPathways: prev.learningPathways.filter((p) => p.id !== gId) };
+      } else {
+        // When adding, we need the name. If not provided, find it in groupOptions
+        const name = gName || groupOptions.find(g => g.id === gId)?.name || 'Unknown';
+        return { ...prev, learningPathways: [...prev.learningPathways, { id: gId, name }] };
+      }
     });
   };
 
@@ -122,7 +137,15 @@ export default function AdminUserEditor() {
       return;
     }
     try {
-      const payload = { id: userId, ...form };
+      // Convert learningPathways back to groupIds for the API
+      const payload = { 
+        id: userId, 
+        ...form,
+        groupIds: form.learningPathways.map(p => p.id)
+      };
+      // Remove learningPathways from payload as backend expects groupIds
+      delete payload.learningPathways;
+      
       const response = await saveUser(payload, !isNew);
       
       // Display success message with details
@@ -272,16 +295,16 @@ export default function AdminUserEditor() {
                 </button>
               </div>
 
-              {form.groupIds.length === 0 ? (
+              {form.learningPathways.length === 0 ? (
                 <div className="text-center text-gray-500 py-4 text-sm">No pathways assigned yet.</div>
               ) : (
                 <ul className="divide-y border rounded">
-                  {form.groupIds.map((gId) => (
-                    <li key={gId} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
-                      <span className="text-sm text-gray-900">{gId}</span>
+                  {form.learningPathways.map((pathway) => (
+                    <li key={pathway.id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
+                      <span className="text-sm text-gray-900">{pathway.name}</span>
                       <button
                         type="button"
-                        onClick={() => toggleGroup(gId)}
+                        onClick={() => toggleGroup(pathway.id)}
                         className="text-sm text-red-600 hover:text-red-700"
                       >
                         Remove
@@ -318,14 +341,14 @@ export default function AdminUserEditor() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => toggleGroup(g.id)}
+                            onClick={() => toggleGroup(g.id, g.name)}
                             className={`px-3 py-1.5 text-sm rounded ${
-                              form.groupIds.includes(g.id)
+                              form.learningPathways.some(p => p.id === g.id)
                                 ? 'bg-red-50 text-red-700 hover:bg-red-100'
                                 : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                             }`}
                           >
-                            {form.groupIds.includes(g.id) ? 'Remove' : 'Add'}
+                            {form.learningPathways.some(p => p.id === g.id) ? 'Remove' : 'Add'}
                           </button>
                         </li>
                       ))}
