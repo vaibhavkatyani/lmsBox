@@ -108,7 +108,7 @@ export default function LearnerHeader() {
       
       // Call logout endpoint if you have one
       try {
-        await fetch(`${API_BASE}/auth/logout`, {
+        await fetch(`${API_BASE}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`

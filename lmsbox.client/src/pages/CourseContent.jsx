@@ -390,7 +390,7 @@ function ContentPanel({ lesson, courseId, onProgressUpdate }) {
         );
       case 'scorm':
         // Use proxy endpoint to avoid CORS issues with SCORM content
-        const proxyUrl = lesson.url ? `/api/scorm-proxy?url=${encodeURIComponent(lesson.url)}` : null;
+        const proxyUrl = lesson.url ? `${API_BASE}/api/scorm-proxy?url=${encodeURIComponent(lesson.url)}` : null;
         return (
           <div className="w-full h-full bg-gray-50 relative">
             {proxyUrl ? (

@@ -52,7 +52,7 @@ export default function AdminHeader() {
       const loadingToast = toast.loading('Logging out...');
       
       try {
-        await fetch(`${API_BASE}/auth/logout`, {
+        await fetch(`${API_BASE}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
