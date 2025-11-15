@@ -4,6 +4,7 @@ import { removeAuthToken, saveLastVisitedPage, getAuthToken, getUserRole, isAdmi
 import toast, { Toaster } from 'react-hot-toast';
 import ConfirmDialog from './ConfirmDialog';
 import { useTheme } from '../theme/ThemeContext';
+import { API_BASE } from '../utils/apiBase';
 
 export default function LearnerHeader() {
   const theme = useTheme();
@@ -107,7 +108,7 @@ export default function LearnerHeader() {
       
       // Call logout endpoint if you have one
       try {
-        await fetch(`${import.meta.env.VITE_API_BASE}/auth/logout`, {
+        await fetch(`${API_BASE}/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`

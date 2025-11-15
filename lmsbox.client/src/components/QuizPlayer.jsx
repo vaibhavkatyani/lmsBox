@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { API_BASE } from '../utils/apiBase';
 
 export default function QuizPlayer({ quizId, onComplete, onProgressUpdate }) {
   const [quiz, setQuiz] = useState(null);
@@ -16,7 +17,7 @@ export default function QuizPlayer({ quizId, onComplete, onProgressUpdate }) {
     const fetchQuiz = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${import.meta.env.VITE_API_BASE}/api/learner/quizzes/${quizId}`, {
+        const response = await fetch(`${API_BASE}/api/learner/quizzes/${quizId}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -101,7 +102,7 @@ export default function QuizPlayer({ quizId, onComplete, onProgressUpdate }) {
         })
       };
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE}/api/learner/quizzes/${quizId}/submit`, {
+      const response = await fetch(`${API_BASE}/api/learner/quizzes/${quizId}/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

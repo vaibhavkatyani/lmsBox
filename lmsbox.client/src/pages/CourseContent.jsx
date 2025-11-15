@@ -5,6 +5,7 @@ import QuizPlayer from '../components/QuizPlayer';
 import { getCourseDetails } from '../services/courseDetails';
 import toast from 'react-hot-toast';
 import usePageTitle from '../hooks/usePageTitle';
+import { API_BASE } from '../utils/apiBase';
 
 function LessonItem({ lesson, isActive, onClick }) {
   const getIcon = (type) => {
@@ -475,7 +476,7 @@ export default function CourseContent() {
   const handleProgressUpdate = async (lessonId, progressData) => {
     try {
       const token = localStorage.getItem('token');
-      await fetch(`${import.meta.env.VITE_API_BASE}/api/learner/courses/${courseId}/lessons/${lessonId}/progress`, {
+      await fetch(`${API_BASE}/api/learner/courses/${courseId}/lessons/${lessonId}/progress`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -515,7 +516,7 @@ export default function CourseContent() {
   const trackLessonAccess = async (lessonId) => {
     try {
       const token = localStorage.getItem('token');
-      await fetch(`${import.meta.env.VITE_API_BASE}/api/learner/courses/${courseId}/lessons/${lessonId}/access`, {
+      await fetch(`${API_BASE}/api/learner/courses/${courseId}/lessons/${lessonId}/access`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -5,6 +5,7 @@ import { removeAuthToken, getUserName, getUserRole } from '../utils/auth';
 import ProfileIcon from './ProfileIcon';
 import ConfirmDialog from './ConfirmDialog';
 import toast, { Toaster } from 'react-hot-toast';
+import { API_BASE } from '../utils/apiBase';
 
 export default function AdminHeader() {
   const theme = useTheme();
@@ -51,7 +52,7 @@ export default function AdminHeader() {
       const loadingToast = toast.loading('Logging out...');
       
       try {
-        await fetch(`${import.meta.env.VITE_API_BASE}/auth/logout`, {
+        await fetch(`${API_BASE}/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
