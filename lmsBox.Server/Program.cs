@@ -257,7 +257,14 @@ if (!app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.MapControllers();
+
+// Fallback to index.html for client-side routing
+app.MapFallbackToFile("/index.html");
 
 // Dev convenience: apply pending EF Core migrations at startup
 // apply migrations at startup but fail fast so app won't run with partial schema
