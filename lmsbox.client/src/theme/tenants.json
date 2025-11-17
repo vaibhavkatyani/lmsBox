@@ -2,7 +2,7 @@
   "default": {
     "name": "LMSBOX",
     "primaryColor": "#1b365d",
-    "logo": "/src/assets/lmsbox-logo.png"
+    "logo": "/assets/lmsbox-logo.png"
   },
   "acme": {
     "name": "Acme Corp",
