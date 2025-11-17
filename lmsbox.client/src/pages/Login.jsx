@@ -1,5 +1,5 @@
 import { useForm } from 'react-hook-form';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { getUserRole, setAuthToken } from '../utils/auth';
 import { useAuth } from '../hooks/useAuth';

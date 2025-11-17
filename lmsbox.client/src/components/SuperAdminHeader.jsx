@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, NavLink } from 'react-router-dom';
-import { useTheme } from '../theme/ThemeContext';
-import { removeAuthToken, getUserName, getUserRole } from '../utils/auth';
+import { removeAuthToken, getUserName } from '../utils/auth';
 import ConfirmDialog from './ConfirmDialog';
 import toast, { Toaster } from 'react-hot-toast';
 import lmsboxLogo from '../assets/lmsbox-logo.png';
 
 export default function SuperAdminHeader() {
-  const theme = useTheme();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);

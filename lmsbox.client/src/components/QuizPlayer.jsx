@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { API_BASE } from '../utils/apiBase';
 
-export default function QuizPlayer({ quizId, onComplete, onProgressUpdate }) {
+export default function QuizPlayer({ quizId, onComplete }) {
   const [quiz, setQuiz] = useState(null);
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState({});
@@ -276,7 +276,7 @@ export default function QuizPlayer({ quizId, onComplete, onProgressUpdate }) {
                           ? (answers[question.id] || []).includes(option.id)
                           : answers[question.id] === option.id
                       }
-                      onChange={(e) => {
+                      onChange={(_e) => {
                         if (question.type === 'mc_multi') {
                           handleAnswerChange(question.id, option.id, true);
                         } else {

@@ -209,15 +209,5 @@ export async function listCoursesForMapping(search = '') {
   } catch (error) {
     console.error('❌ Error fetching courses:', error);
     return [];
-    const mock = [
-      { id: 'c1', title: 'Cyber Security Essentials', category: 'Security' },
-      { id: 'c2', title: 'GDPR Compliance', category: 'Compliance' },
-      { id: 'c3', title: 'Effective Communication', category: 'Soft Skills' },
-      { id: 'c4', title: 'Employee Engagement', category: 'HR' },
-    ];
-    const searchTerm = search?.trim();
-    if (!searchTerm) return mock;
-    const lower = searchTerm.toLowerCase();
-    return mock.filter((c) => c.title.toLowerCase().includes(lower));
   }
 }

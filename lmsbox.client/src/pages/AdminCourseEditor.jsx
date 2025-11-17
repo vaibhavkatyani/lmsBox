@@ -448,12 +448,12 @@ export default function AdminCourseEditor() {
       // Prepare course data
       const courseData = courseHelpers.transformCourseFormToRequest(form);
       
-      let savedCourse;
+      let _savedCourse;
       if (isNew) {
-        savedCourse = await adminCourseService.createCourse(courseData);
+        _savedCourse = await adminCourseService.createCourse(courseData);
         toast.success('Course created successfully');
       } else {
-        savedCourse = await adminCourseService.updateCourse(courseId, courseData);
+        _savedCourse = await adminCourseService.updateCourse(courseId, courseData);
         toast.success('Course updated successfully');
       }
       

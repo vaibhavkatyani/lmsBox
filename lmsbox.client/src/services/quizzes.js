@@ -30,7 +30,7 @@ export async function saveQuiz(quizData, isEdit = false) {
     allowRetake: quizData.allowRetake,
     maxAttempts: quizData.maxAttempts,
     courseId: quizData.courseId,
-    questions: quizData.questions.map((q, index) => ({
+    questions: quizData.questions.map((q, _index) => ({
       question: q.question,
       type: q.type,
       points: q.points,

@@ -17,7 +17,7 @@ import toast from 'react-hot-toast';
 export default function SuperAdminDashboard() {
   usePageTitle('Super Admin Dashboard');
   const navigate = useNavigate();
-  const [organisations, setOrganisations] = useState([]);
+  const [_organisations, setOrganisations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalOrgs: 0,

@@ -84,9 +84,8 @@ function LessonItem({ lesson, isActive, onClick }) {
   );
 }
 
-function ContentPanel({ lesson, courseId, onProgressUpdate }) {
+function ContentPanel({ lesson, courseId: _courseId, onProgressUpdate }) {
   const videoRef = React.useRef(null);
-  const iframeRef = React.useRef(null);
   const [hasStarted, setHasStarted] = React.useState(false);
   const sessionStartTimeRef = React.useRef(null);
   const timeTrackingIntervalRef = React.useRef(null);
@@ -154,7 +153,7 @@ function ContentPanel({ lesson, courseId, onProgressUpdate }) {
     const handleScormMessage = (event) => {
       // Accept messages from the SCORM player
       if (event.data && event.data.type === 'scorm') {
-        const { status, score } = event.data;
+        const { status, score: _score } = event.data;
         
         // SCORM statuses: completed, incomplete, passed, failed
         if (status === 'completed' || status === 'passed') {
@@ -237,7 +236,7 @@ function ContentPanel({ lesson, courseId, onProgressUpdate }) {
 
   const renderContent = () => {
     switch (lesson.type) {
-      case 'video':
+      case 'video': {
         // Check if it's a YouTube or Vimeo embed URL
         const isYouTube = lesson.url && (lesson.url.includes('youtube.com') || lesson.url.includes('youtu.be'));
         const isVimeo = lesson.url && lesson.url.includes('vimeo.com');
@@ -245,7 +244,7 @@ function ContentPanel({ lesson, courseId, onProgressUpdate }) {
         // Convert YouTube URLs to embed format
         let embedUrl = lesson.url;
         if (isYouTube) {
-          const youtubeId = lesson.url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1];
+          const youtubeId = lesson.url.match(/(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/)?.[1];
           if (youtubeId) {
             embedUrl = `https://www.youtube.com/embed/${youtubeId}`;
           }
@@ -305,8 +304,9 @@ function ContentPanel({ lesson, courseId, onProgressUpdate }) {
             )}
           </div>
         );
+      }
       case 'pdf':
-      case 'document':
+      case 'document': {
         return (
           <div className="w-full h-full bg-gray-100 relative">
             {lesson.url ? (
@@ -369,11 +369,12 @@ function ContentPanel({ lesson, courseId, onProgressUpdate }) {
             )}
           </div>
         );
+      }
       case 'quiz':
         return lesson.quizId ? (
           <QuizPlayer 
             quizId={lesson.quizId}
-            onComplete={(score) => {
+            onComplete={(_score) => {
               // Mark lesson as complete when quiz is passed
               onProgressUpdate?.(lesson.id, {
                 progressPercent: 100,
@@ -388,7 +389,7 @@ function ContentPanel({ lesson, courseId, onProgressUpdate }) {
             <p className="text-gray-500">Quiz not configured</p>
           </div>
         );
-      case 'scorm':
+      case 'scorm': {
         // Use proxy endpoint to avoid CORS issues with SCORM content
         const proxyUrl = lesson.url ? `${API_BASE}/api/scorm-proxy?url=${encodeURIComponent(lesson.url)}` : null;
         return (
@@ -413,6 +414,7 @@ function ContentPanel({ lesson, courseId, onProgressUpdate }) {
             )}
           </div>
         );
+      }
       case 'content':
         return (
           <div className="w-full h-full bg-white p-8 overflow-auto">

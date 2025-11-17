@@ -201,14 +201,14 @@ export const uploadVideo = async (file, title, description, tags, onProgress) =>
         try {
           const response = JSON.parse(xhr.responseText);
           resolve(response);
-        } catch (e) {
+        } catch (_e) {
           reject(new Error('Invalid response from server'));
         }
       } else {
         try {
           const error = JSON.parse(xhr.responseText);
           reject(new Error(error.message || `Upload failed with status ${xhr.status}`));
-        } catch (e) {
+        } catch (_e) {
           reject(new Error(`Upload failed with status ${xhr.status}`));
         }
       }
@@ -248,14 +248,14 @@ export const uploadPdf = async (file, title, description, tags, onProgress) => {
         try {
           const response = JSON.parse(xhr.responseText);
           resolve(response);
-        } catch (e) {
+        } catch (_e) {
           reject(new Error('Invalid response from server'));
         }
       } else {
         try {
           const error = JSON.parse(xhr.responseText);
           reject(new Error(error.message || `Upload failed with status ${xhr.status}`));
-        } catch (e) {
+        } catch (_e) {
           reject(new Error(`Upload failed with status ${xhr.status}`));
         }
       }
