@@ -5,7 +5,8 @@ import {
   DocumentCheckIcon,
   PlusIcon,
   MagnifyingGlassIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import { listQuizzes } from '../services/quizzes';
 import lessonsService from '../services/lessons';
@@ -290,6 +291,14 @@ export default function QuizLessonModal({ isOpen, onClose, courseId, lesson, onS
                             )}
                           </div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/admin/quiz/edit/${selectedQuiz.id}`)}
+                          className="ml-3 inline-flex items-center px-3 py-1.5 text-sm font-medium text-orange-600 bg-white border border-orange-300 rounded-md hover:bg-orange-50 transition shrink-0"
+                        >
+                          <PencilSquareIcon className="h-4 w-4 mr-1" />
+                          Edit Quiz
+                        </button>
                       </div>
                     </div>
                     <button
