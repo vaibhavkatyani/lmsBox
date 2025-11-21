@@ -91,11 +91,14 @@ export default function OrganisationSettings() {
       setUploading(true);
       const result = await uploadBannerImage(croppedImageFile);
       
+      // Add timestamp to bust cache
+      const urlWithTimestamp = `${result.url}?t=${Date.now()}`;
+      
       // Update the form with the new logo URL
-      setForm((prev) => ({ ...prev, logoUrl: result.url }));
+      setForm((prev) => ({ ...prev, logoUrl: urlWithTimestamp }));
       
       // Also update the orgInfo to reflect the change immediately
-      setOrgInfo((prev) => ({ ...prev, logoUrl: result.url }));
+      setOrgInfo((prev) => ({ ...prev, logoUrl: urlWithTimestamp }));
       
       toast.success('Banner image uploaded successfully');
     } catch (e) {
@@ -216,6 +219,7 @@ export default function OrganisationSettings() {
                     <p className="text-sm font-medium text-gray-700 mb-2">Banner Preview (37:9 ratio):</p>
                     <div className="border border-gray-200 rounded-lg p-2 bg-white">
                       <img 
+                        key={form.logoUrl}
                         src={form.logoUrl} 
                         alt="Banner preview" 
                         className="w-full max-w-2xl h-auto object-contain"

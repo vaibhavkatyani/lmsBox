@@ -350,16 +350,30 @@ namespace lmsBox.Server.Controllers
                     else
                     {
                         var baseUrl = _config["AppSettings:BaseUrl"] ?? Request.Scheme + "://" + Request.Host;
-                        var loginUrl = $"{baseUrl}/login";
+                        var portalUrl = $"{baseUrl}/login";
                         
                         _logger.LogInformation("Email service available, sending to {Email}", user.Email);
                         
-                        await _emailService.SendUserRegistrationNotificationAsync(
-                            user.Email,
-                            user.FirstName,
-                            user.LastName,
-                            roleToAssign,
-                            loginUrl);
+                        // For learners, send the new learner registration email
+                        if (roleToAssign == "Learner" && user.OrganisationID.HasValue)
+                        {
+                            await _emailService.SendLearnerRegistrationEmailAsync(
+                                user.Email,
+                                portalUrl,
+                                user.OrganisationID.Value.ToString(),
+                                user.FirstName,
+                                request.GroupIds != null && request.GroupIds.Any());
+                        }
+                        else
+                        {
+                            // For admins, send the old notification email
+                            await _emailService.SendUserRegistrationNotificationAsync(
+                                user.Email,
+                                user.FirstName,
+                                user.LastName,
+                                roleToAssign,
+                                portalUrl);
+                        }
                             
                         _logger.LogInformation("Registration email sent successfully to {Email}", user.Email);
                     }

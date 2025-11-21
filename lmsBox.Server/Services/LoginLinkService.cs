@@ -17,12 +17,14 @@ namespace lmsBox.Server.Services
         private readonly ApplicationDbContext _db;
         private readonly IConfiguration _config;
         private readonly ILogger<LoginLinkService> _logger;
+        private readonly IEmailService? _emailService;
 
-        public LoginLinkService(ApplicationDbContext db, IConfiguration config, ILogger<LoginLinkService> logger)
+        public LoginLinkService(ApplicationDbContext db, IConfiguration config, ILogger<LoginLinkService> logger, IEmailService? emailService = null)
         {
             _db = db;
             _config = config;
             _logger = logger;
+            _emailService = emailService;
         }
 
         // Return bool to avoid returning the raw link/token to callers.
@@ -73,10 +75,39 @@ namespace lmsBox.Server.Services
             var encoded = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
             var link = $"{frontendBase}/verify-login?token={encoded}";
 
-            // send email (SendGrid) and record telemetry
+            // send email using the new template-based email service
             try
             {
-                var (sent, error) = await SendEmailAsync(user.Email!, "Your sign-in link", $"Click to sign in: {link}", $"<p>Click to sign in: <a href=\"{link}\">{link}</a></p>");
+                bool sent = false;
+                string? error = null;
+
+                if (_emailService != null && user.OrganisationID.HasValue)
+                {
+                    // Use the new template-based email
+                    try
+                    {
+                        await _emailService.SendLoginLinkEmailAsync(
+                            user.Email!,
+                            link,
+                            expiryMinutes,
+                            user.OrganisationID.Value.ToString(),
+                            user.FirstName);
+                        sent = true;
+                    }
+                    catch (Exception emailEx)
+                    {
+                        _logger.LogError(emailEx, "Failed to send login link via EmailService");
+                        error = emailEx.Message;
+                        sent = false;
+                    }
+                }
+                else
+                {
+                    // Fallback to old method if EmailService is not available
+                    var (oldSent, oldError) = await SendEmailAsync(user.Email!, "Your sign-in link", $"Click to sign in: {link}", $"<p>Click to sign in: <a href=\"{link}\">{link}</a></p>");
+                    sent = oldSent;
+                    error = oldError;
+                }
 
                 if (sent)
                 {
