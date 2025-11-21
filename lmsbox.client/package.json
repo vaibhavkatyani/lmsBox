@@ -18,10 +18,12 @@
     "react": "^19.1.1",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.1.1",
+    "react-easy-crop": "^5.5.5",
     "react-google-recaptcha": "^3.1.0",
     "react-helmet": "^6.1.0",
     "react-hook-form": "^7.65.0",
     "react-hot-toast": "^2.6.0",
+    "react-image-crop": "^11.0.10",
     "react-router-dom": "^7.9.4",
     "react-toastify": "^11.0.5",
     "tailwindcss": "^4.1.16"

@@ -7,7 +7,7 @@ import ConfirmDialog from './ConfirmDialog';
 import toast, { Toaster } from 'react-hot-toast';
 import { API_BASE } from '../utils/apiBase';
 
-export default function AdminHeader() {
+export default function AdminHeader({ hideNavigation = false }) {
   const theme = useTheme();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -95,48 +95,51 @@ export default function AdminHeader() {
             <img src={theme.logo} alt="Logo" className="h-8 w-auto" />
           </Link>
 
-          <div 
-            ref={menuRef}
-            className={`${isMobileMenuOpen ? 'block' : 'hidden'} lg:block fixed lg:relative inset-0 lg:inset-auto z-50`}>
-            <div className={`${isMobileMenuOpen ? 'block' : 'hidden'} lg:hidden fixed inset-0 bg-page-dark-bg bg-opacity-40`} onClick={() => setIsMobileMenuOpen(false)} />
-            <button
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="lg:hidden fixed top-2 right-4 z-50 rounded-full bg-white w-9 h-9 flex items-center justify-center border border-gray-200">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 fill-boxlms-profile" viewBox="0 0 320.591 320.591">
-                <path d="M30.391 318.583a30.37 30.37 0 0 1-21.56-7.288c-11.774-11.844-11.774-30.973 0-42.817L266.643 10.665c12.246-11.459 31.462-10.822 42.921 1.424 10.362 11.074 10.966 28.095 1.414 39.875L51.647 311.295a30.366 30.366 0 0 1-21.256 7.288z" />
-                <path d="M287.9 318.583a30.37 30.37 0 0 1-21.257-8.806L8.83 51.963C-2.078 39.225-.595 20.055 12.143 9.146c11.369-9.736 28.136-9.736 39.504 0l259.331 257.813c12.243 11.462 12.876 30.679 1.414 42.922-.456.487-.927.958-1.414 1.414a30.368 30.368 0 0 1-23.078 7.288z" />
-              </svg>
-            </button>
+          {!hideNavigation && (
+            <>
+              <div 
+                ref={menuRef}
+                className={`${isMobileMenuOpen ? 'block' : 'hidden'} lg:block fixed lg:relative inset-0 lg:inset-auto z-50`}>
+                <div className={`${isMobileMenuOpen ? 'block' : 'hidden'} lg:hidden fixed inset-0 bg-page-dark-bg bg-opacity-40`} onClick={() => setIsMobileMenuOpen(false)} />
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="lg:hidden fixed top-2 right-4 z-50 rounded-full bg-white w-9 h-9 flex items-center justify-center border border-gray-200">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 fill-boxlms-profile" viewBox="0 0 320.591 320.591">
+                    <path d="M30.391 318.583a30.37 30.37 0 0 1-21.56-7.288c-11.774-11.844-11.774-30.973 0-42.817L266.643 10.665c12.246-11.459 31.462-10.822 42.921 1.424 10.362 11.074 10.966 28.095 1.414 39.875L51.647 311.295a30.366 30.366 0 0 1-21.256 7.288z" />
+                    <path d="M287.9 318.583a30.37 30.37 0 0 1-21.257-8.806L8.83 51.963C-2.078 39.225-.595 20.055 12.143 9.146c11.369-9.736 28.136-9.736 39.504 0l259.331 257.813c12.243 11.462 12.876 30.679 1.414 42.922-.456.487-.927.958-1.414 1.414a30.368 30.368 0 0 1-23.078 7.288z" />
+                  </svg>
+                </button>
 
-            <ul className="lg:flex lg:gap-x-10 max-lg:space-y-3 fixed lg:relative bg-white lg:bg-transparent w-2/3 lg:w-auto min-w-[300px] lg:min-w-0 top-0 left-0 h-full lg:h-auto p-4 lg:p-0 shadow-md lg:shadow-none overflow-auto lg:overflow-visible z-50">
-              <li className="mb-6 hidden max-lg:block">
-                <NavLink to="/admin/dashboard">
-                  <img src={theme.logo} alt="Logo" className="h-8 w-auto" />
-                </NavLink>
-              </li>
-              {[
-                { to: '/admin/dashboard', label: 'Dashboard' },
-                { to: '/admin/users', label: 'Users' },
-                { to: '/admin/courses', label: 'Courses' },
-                { to: '/admin/learning-pathways', label: 'Learning Pathways' },
-                { to: '/admin/reports', label: 'Reports' }
-              ].map((link) => (
-                <li key={link.to} className="nav-item relative group">
-                  <NavLink
-                    to={link.to}
-                    className={({ isActive }) =>
-                      `block text-[15px] font-medium relative py-2 px-1 transition-colors duration-200
-                      ${isActive 
-                        ? 'text-boxlms-navbar-active' 
-                        : 'text-boxlms-navbar-txt hover:text-boxlms-navbar-active'
-                      }
-                      lg:after:content-[""] lg:after:block lg:after:absolute lg:after:h-0.5 
-                      lg:after:bg-boxlms-navbar-active lg:after:w-full lg:after:scale-x-0 lg:hover:after:scale-x-100 
-                      lg:after:transition-transform lg:after:duration-300 lg:after:origin-left
-                      ${isActive ? 'lg:after:scale-x-100' : ''}`
-                    }
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
+                <ul className="lg:flex lg:gap-x-10 max-lg:space-y-3 fixed lg:relative bg-white lg:bg-transparent w-2/3 lg:w-auto min-w-[300px] lg:min-w-0 top-0 left-0 h-full lg:h-auto p-4 lg:p-0 shadow-md lg:shadow-none overflow-auto lg:overflow-visible z-50">
+                  <li className="mb-6 hidden max-lg:block">
+                    <NavLink to="/admin/dashboard">
+                      <img src={theme.logo} alt="Logo" className="h-8 w-auto" />
+                    </NavLink>
+                  </li>
+                  {[
+                    { to: '/admin/dashboard', label: 'Dashboard' },
+                    { to: '/admin/users', label: 'Users' },
+                    { to: '/admin/courses', label: 'Courses' },
+                    { to: '/admin/learning-pathways', label: 'Learning Pathways' },
+                    { to: '/admin/reports', label: 'Reports' },
+                    { to: '/admin/settings', label: 'Settings' }
+                  ].map((link) => (
+                    <li key={link.to} className="nav-item relative group">
+                      <NavLink
+                        to={link.to}
+                        className={({ isActive }) =>
+                          `block text-[15px] font-medium relative py-2 px-1 transition-colors duration-200
+                          ${isActive 
+                            ? 'text-boxlms-navbar-active' 
+                            : 'text-boxlms-navbar-txt hover:text-boxlms-navbar-active'
+                          }
+                          lg:after:content-[""] lg:after:block lg:after:absolute lg:after:h-0.5 
+                          lg:after:bg-boxlms-navbar-active lg:after:w-full lg:after:scale-x-0 lg:hover:after:scale-x-100 
+                          lg:after:transition-transform lg:after:duration-300 lg:after:origin-left
+                          ${isActive ? 'lg:after:scale-x-100' : ''}`
+                        }
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
                     {link.label}
                   </NavLink>
                   <span className="lg:hidden absolute left-0 w-1 h-full bg-blue-600 transform scale-y-0 group-hover:scale-y-100 transition-transform duration-200" />
@@ -144,6 +147,17 @@ export default function AdminHeader() {
               ))}
             </ul>
           </div>
+
+          <button
+            id="toggleOpen"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="lg:hidden">
+            <svg className="w-7 h-7 fill-boxlms-navbar-txt" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+              <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+            </svg>
+          </button>
+            </>
+          )}
 
           <div className="flex items-center max-sm:ml-auto space-x-6">
             <div className="relative flex items-center space-x-3">
@@ -191,13 +205,6 @@ export default function AdminHeader() {
                 </div>
               )}
             </div>
-
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden cursor-pointer"
-            >
-              {/* Hamburger menu handled by mobile menu overlay */}
-            </button>
           </div>
         </div>
       </header>

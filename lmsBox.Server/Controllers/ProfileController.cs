@@ -5,6 +5,7 @@ using lmsBox.Server.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace lmsBox.Server.Controllers;
 
@@ -16,15 +17,18 @@ public class ProfileController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<ProfileController> _logger;
     private readonly IAuditLogService _auditLogService;
+    private readonly ApplicationDbContext _context;
 
     public ProfileController(
         UserManager<ApplicationUser> userManager, 
         ILogger<ProfileController> logger,
-        IAuditLogService auditLogService)
+        IAuditLogService auditLogService,
+        ApplicationDbContext context)
     {
         _userManager = userManager;
         _logger = logger;
         _auditLogService = auditLogService;
+        _context = context;
     }
 
     [HttpGet("me")]
@@ -33,15 +37,36 @@ public class ProfileController : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-        var user = await _userManager.FindByIdAsync(userId);
+        // Load user with organisation and roles
+        var user = await _context.Users
+            .Include(u => u.Organisation)
+            .Include(u => u.UserUserRoles)
+                .ThenInclude(uur => uur.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null) return Unauthorized();
+
+        // Get assigned learning pathways (via LearnerPathwayProgress)
+        var assignedPathways = await _context.LearnerPathwayProgresses
+            .Where(lp => lp.UserId == userId)
+            .Include(lp => lp.LearningPathway)
+            .Select(lp => new {
+                id = lp.LearningPathwayId,
+                title = lp.LearningPathway != null ? lp.LearningPathway.Title : null
+            })
+            .ToListAsync();
+
+        // Get roles
+        var roles = user.UserUserRoles.Select(uur => uur.Role != null ? uur.Role.Name : null).Where(r => r != null).ToList();
 
         return Ok(new
         {
             id = user.Id,
             firstName = user.FirstName,
             lastName = user.LastName,
-            email = user.Email
+            email = user.Email,
+            organisation = user.Organisation != null ? user.Organisation.Name : null,
+            roles,
+            assignedPathways
         });
     }
 

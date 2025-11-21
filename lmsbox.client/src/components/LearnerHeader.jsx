@@ -217,8 +217,9 @@ export default function LearnerHeader() {
                 <hr className="border-b-0 my-4 border-gray-300" />
                 <ul className="space-y-1.5">
                   <li><Link to="/profile" className="text-sm text-gray-500 hover:text-slate-900">Profile Settings</Link></li>
+                  <li><Link to="/courses/all" className="text-sm text-gray-500 hover:text-slate-900">My Learning</Link></li>
+                  <li><Link to="/courses/certificates" className="text-sm text-gray-500 hover:text-slate-900">My Certificates</Link></li>
                   <li><Link to="/notifications" className="text-sm text-gray-500 hover:text-slate-900">Notifications</Link></li>
-                  <li><Link to="/grades" className="text-sm text-gray-500 hover:text-slate-900">My Grades</Link></li>
                   <li><Link to="/help" className="text-sm text-gray-500 hover:text-slate-900">Help Center</Link></li>
                 </ul>
                 {isUserAdmin && (

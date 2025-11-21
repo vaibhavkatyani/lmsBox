@@ -1,5 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import AdminProfile from './pages/AdminProfile';
+import LearnerProfile from './pages/LearnerProfile';
 import Login from './pages/Login';
 import VerifyLogin from './pages/VerifyLogin';
 import AuthTest from './pages/AuthTest';
@@ -36,6 +38,7 @@ import SuperAdminOrganisations from './pages/SuperAdminOrganisations';
 import SuperAdminOrganisationForm from './pages/SuperAdminOrganisationForm';
 import SuperAdminLibrary from './pages/SuperAdminLibrary';
 import SuperAdminLibraryCreate from './pages/SuperAdminLibraryCreate';
+import OrganisationSettings from './pages/OrganisationSettings';
 
 function App() {
   return (
@@ -62,6 +65,27 @@ function App() {
           />
           <Route path="/verify-login" element={<VerifyLogin />} />
           <Route path="/auth-test" element={<AuthTest />} />
+          
+          {/* Admin profile page */}
+          <Route
+            path="/admin/profile"
+            element={
+              <AdminRoute>
+                <AdminProfile />
+              </AdminRoute>
+            }
+          />
+          
+          {/* Learner profile page */}
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <LearnerProfile />
+              </ProtectedRoute>
+            }
+          />
+          
           {/* Protected courses routes (path-based tabs) */}
           <Route path="/courses" element={<Navigate to="/courses/all" replace />} />
           <Route
@@ -131,6 +155,14 @@ function App() {
             element={
               <AdminRoute>
                 <AdminUserEditor />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/settings"
+            element={
+              <AdminRoute>
+                <OrganisationSettings />
               </AdminRoute>
             }
           />
