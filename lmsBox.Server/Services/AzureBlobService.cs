@@ -114,6 +114,49 @@ public class AzureBlobService : IAzureBlobService
         }
     }
 
+    // Upload to branding container specifically
+    public async Task<string> UploadToBrandingContainerAsync(Stream fileStream, string fileName, string folderPath, string contentType)
+    {
+        if (string.IsNullOrEmpty(_connectionString))
+        {
+            throw new InvalidOperationException("Azure Blob Storage is not configured");
+        }
+
+        try
+        {
+            var containerName = "lms-content-brandui";
+            
+            // Create container client for branding container
+            var blobServiceClient = new BlobServiceClient(_connectionString);
+            var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
+            await containerClient.CreateIfNotExistsAsync(PublicAccessType.None);
+
+            var blobPath = $"{folderPath}/{fileName}";
+            var blobClient = containerClient.GetBlobClient(blobPath);
+
+            // Set content type
+            var blobHttpHeaders = new BlobHttpHeaders
+            {
+                ContentType = contentType
+            };
+
+            // Upload with overwrite
+            await blobClient.UploadAsync(fileStream, new BlobUploadOptions
+            {
+                HttpHeaders = blobHttpHeaders
+            });
+
+            _logger.LogInformation("File uploaded successfully to branding container: {BlobPath}", blobPath);
+
+            return blobClient.Uri.ToString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading file to branding container");
+            throw;
+        }
+    }
+
     /// <summary>
     /// Upload a file to Azure Blob Storage with custom folder path
     /// </summary>

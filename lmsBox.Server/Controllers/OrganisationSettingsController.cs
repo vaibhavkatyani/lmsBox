@@ -84,7 +84,7 @@ public class OrganisationSettingsController : ControllerBase
                 id = organisation.Id,
                 name = organisation.Name,
                 description = organisation.Description,
-                brandName = organisation.FromName,
+                brandName = organisation.BrandName,
                 logoUrl = organisation.BannerUrl,
                 faviconUrl = organisation.FaviconUrl,
                 supportName = organisation.ManagerName,
@@ -158,7 +158,7 @@ public class OrganisationSettingsController : ControllerBase
             }
 
             organisation.Description = request.Description?.Trim();
-            organisation.FromName = request.BrandName?.Trim();
+            organisation.BrandName = request.BrandName?.Trim();
             organisation.BannerUrl = request.LogoUrl?.Trim();
             organisation.ManagerName = request.SupportName?.Trim();
             organisation.SupportEmail = request.SupportEmail?.Trim();
@@ -175,7 +175,7 @@ public class OrganisationSettingsController : ControllerBase
                 id = organisation.Id,
                 name = organisation.Name,
                 description = organisation.Description,
-                brandName = organisation.FromName,
+                brandName = organisation.BrandName,
                 logoUrl = organisation.BannerUrl,
                 faviconUrl = organisation.FaviconUrl,
                 supportName = organisation.ManagerName,
@@ -251,29 +251,30 @@ public class OrganisationSettingsController : ControllerBase
                 return StatusCode(500, new { message = "File storage is not configured" });
             }
 
-            // Upload to Azure Blob Storage
-            var orgId = user.OrganisationID.Value.ToString("D10");
-            var fileName = $"banner-{Guid.NewGuid()}{extension}";
-            var folderPath = $"organisation/{orgId}/branding";
-
-            string imageUrl;
-            using (var stream = image.OpenReadStream())
-            {
-                imageUrl = await _blobService.UploadToCustomPathAsync(
-                    stream, 
-                    fileName, 
-                    folderPath, 
-                    image.ContentType
-                );
-            }
-
-            // Update organisation banner URL
+            // Get organisation details first
             var organisation = await _context.Organisations
                 .FirstOrDefaultAsync(o => o.Id == user.OrganisationID.Value);
 
             if (organisation == null)
             {
                 return NotFound(new { message = "Organisation not found" });
+            }
+
+            // Upload to Azure Blob Storage in lms-content-brandui container
+            var companyName = organisation.Name.Replace(" ", "").ToLower();
+            var bannerId = Guid.NewGuid();
+            var fileName = $"banner_{bannerId}{extension}";
+            var folderPath = $"{companyName}";
+
+            string imageUrl;
+            using (var stream = image.OpenReadStream())
+            {
+                imageUrl = await _blobService.UploadToBrandingContainerAsync(
+                    stream, 
+                    fileName, 
+                    folderPath, 
+                    image.ContentType
+                );
             }
 
             organisation.BannerUrl = imageUrl;
@@ -302,3 +303,4 @@ public class UpdateOrganisationSettingsRequest
     public string? SupportEmail { get; set; }
     public string? SupportPhone { get; set; }
 }
+

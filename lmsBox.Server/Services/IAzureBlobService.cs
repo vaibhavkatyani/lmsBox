@@ -13,6 +13,11 @@ public interface IAzureBlobService
     Task<string> UploadToCustomPathAsync(Stream fileStream, string fileName, string folderPath, string contentType, string? subFolder = null);
 
     /// <summary>
+    /// Upload a file to the branding container (lms-content-brandui)
+    /// </summary>
+    Task<string> UploadToBrandingContainerAsync(Stream fileStream, string fileName, string folderPath, string contentType);
+
+    /// <summary>
     /// List all files in an organization's library folder
     /// </summary>
     Task<List<BlobFileInfo>> ListOrganisationFilesAsync(string organisationId, string? fileType = null);

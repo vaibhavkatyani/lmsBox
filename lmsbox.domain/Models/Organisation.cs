@@ -44,6 +44,8 @@ public class Organisation
     
     public string? FromName { get; set; }
     
+    public string? BrandName { get; set; }
+    
     // Support and Contact
     public string? SupportEmail { get; set; }
     

@@ -1,12 +1,16 @@
 using Microsoft.Extensions.Options;
 using SendGrid;
 using SendGrid.Helpers.Mail;
+using lmsbox.infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace lmsBox.Server.Services
 {
     public interface IEmailService
     {
         Task SendUserRegistrationNotificationAsync(string userEmail, string firstName, string lastName, string role, string loginUrl);
+        Task SendLoginLinkEmailAsync(string userEmail, string loginUrl, int expiryMinutes, string organisationId, string? firstName = null);
+        Task SendLearnerRegistrationEmailAsync(string userEmail, string portalUrl, string organisationId, string? firstName = null, bool hasCourses = false);
         Task SendEmailAsync(string to, string subject, string htmlBody, string? textBody = null);
     }
 
@@ -15,15 +19,18 @@ namespace lmsBox.Server.Services
         private readonly IWebHostEnvironment _env;
         private readonly IConfiguration _config;
         private readonly ILogger<EmailService> _logger;
+        private readonly ApplicationDbContext _context;
 
         public EmailService(
             IWebHostEnvironment env,
             IConfiguration config,
-            ILogger<EmailService> logger)
+            ILogger<EmailService> logger,
+            ApplicationDbContext context)
         {
             _env = env;
             _config = config;
             _logger = logger;
+            _context = context;
         }
 
         public async Task SendUserRegistrationNotificationAsync(string userEmail, string firstName, string lastName, string role, string loginUrl)
@@ -181,6 +188,79 @@ namespace lmsBox.Server.Services
             }
             
             return result;
+        }
+
+        public async Task SendLoginLinkEmailAsync(string userEmail, string loginUrl, int expiryMinutes, string organisationId, string? firstName = null)
+        {
+            try
+            {
+                // Fetch organization details from database
+                var orgId = long.Parse(organisationId);
+                var organisation = await _context.Organisations
+                    .FirstOrDefaultAsync(o => o.Id == orgId);
+
+                var brandName = organisation?.BrandName ?? _config["AppSettings:AppName"] ?? "LMS Box";
+                var supportEmail = organisation?.SupportEmail ?? _config["AppSettings:SupportEmail"] ?? "support@example.com";
+
+                var templateData = new Dictionary<string, object>
+                {
+                    {"BrandName", brandName},
+                    {"FirstName", firstName ?? ""},
+                    {"LoginUrl", loginUrl},
+                    {"ExpiryMinutes", expiryMinutes},
+                    {"SupportEmail", supportEmail},
+                    {"Year", DateTime.Now.Year}
+                };
+
+                var htmlBody = await LoadAndProcessTemplate("LoginLinkEmail.html", templateData);
+                var subject = $"Your Login Link for {brandName}";
+
+                await SendEmailAsync(userEmail, subject, htmlBody);
+
+                _logger.LogInformation("Login link email sent to {Email}", userEmail);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send login link email to {Email}", userEmail);
+                throw;
+            }
+        }
+
+        public async Task SendLearnerRegistrationEmailAsync(string userEmail, string portalUrl, string organisationId, string? firstName = null, bool hasCourses = false)
+        {
+            try
+            {
+                // Fetch organization details from database
+                var orgId = long.Parse(organisationId);
+                var organisation = await _context.Organisations
+                    .FirstOrDefaultAsync(o => o.Id == orgId);
+
+                var brandName = organisation?.BrandName ?? _config["AppSettings:AppName"] ?? "LMS Box";
+                var supportEmail = organisation?.SupportEmail ?? _config["AppSettings:SupportEmail"] ?? "support@example.com";
+
+                var templateData = new Dictionary<string, object>
+                {
+                    {"BrandName", brandName},
+                    {"FirstName", firstName ?? ""},
+                    {"Email", userEmail},
+                    {"PortalUrl", portalUrl},
+                    {"HasCourses", hasCourses},
+                    {"SupportEmail", supportEmail},
+                    {"Year", DateTime.Now.Year}
+                };
+
+                var htmlBody = await LoadAndProcessTemplate("LearnerRegistrationEmail.html", templateData);
+                var subject = $"Welcome to {brandName}";
+
+                await SendEmailAsync(userEmail, subject, htmlBody);
+
+                _logger.LogInformation("Learner registration email sent to {Email}", userEmail);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send learner registration email to {Email}", userEmail);
+                throw;
+            }
         }
     }
 }
