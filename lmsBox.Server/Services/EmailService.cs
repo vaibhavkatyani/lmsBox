@@ -148,12 +148,13 @@ namespace lmsBox.Server.Services
 
         private string ProcessConditionalBlocks(string template, Dictionary<string, object> data)
         {
-            // Simple conditional processing for {{#if key}}...{{/if}} blocks
+            // Simple conditional processing for {{#if key}}...{{else}}...{{/if}} blocks
             var result = template;
             
             foreach (var item in data)
             {
                 var ifPattern = $"{{{{#if {item.Key}}}}}";
+                var elsePattern = "{{else}}";
                 var endIfPattern = "{{/if}}";
                 
                 while (result.Contains(ifPattern))
@@ -164,8 +165,23 @@ namespace lmsBox.Server.Services
                     if (startIndex >= 0 && endIndex >= 0)
                     {
                         var beforeBlock = result.Substring(0, startIndex);
-                        var blockContent = result.Substring(startIndex + ifPattern.Length, endIndex - startIndex - ifPattern.Length);
+                        var fullBlock = result.Substring(startIndex + ifPattern.Length, endIndex - startIndex - ifPattern.Length);
                         var afterBlock = result.Substring(endIndex + endIfPattern.Length);
+                        
+                        // Check for else block
+                        string trueContent;
+                        string falseContent = string.Empty;
+                        
+                        var elseIndex = fullBlock.IndexOf(elsePattern);
+                        if (elseIndex >= 0)
+                        {
+                            trueContent = fullBlock.Substring(0, elseIndex);
+                            falseContent = fullBlock.Substring(elseIndex + elsePattern.Length);
+                        }
+                        else
+                        {
+                            trueContent = fullBlock;
+                        }
                         
                         // Check if condition is true
                         var shouldInclude = false;
@@ -178,7 +194,7 @@ namespace lmsBox.Server.Services
                             shouldInclude = !string.IsNullOrEmpty(item.Value.ToString());
                         }
                         
-                        result = beforeBlock + (shouldInclude ? blockContent : string.Empty) + afterBlock;
+                        result = beforeBlock + (shouldInclude ? trueContent : falseContent) + afterBlock;
                     }
                     else
                     {
@@ -213,7 +229,7 @@ namespace lmsBox.Server.Services
                 };
 
                 var htmlBody = await LoadAndProcessTemplate("LoginLinkEmail.html", templateData);
-                var subject = $"Your Login Link for {brandName}";
+                var subject = $"Your Secure Login Link for {brandName} learning portal";
 
                 await SendEmailAsync(userEmail, subject, htmlBody);
 
@@ -250,7 +266,7 @@ namespace lmsBox.Server.Services
                 };
 
                 var htmlBody = await LoadAndProcessTemplate("LearnerRegistrationEmail.html", templateData);
-                var subject = $"Welcome to {brandName}";
+                var subject = $"Welcome to {brandName} learning portal";
 
                 await SendEmailAsync(userEmail, subject, htmlBody);
 

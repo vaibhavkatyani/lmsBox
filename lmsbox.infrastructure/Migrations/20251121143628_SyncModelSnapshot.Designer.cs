@@ -12,8 +12,8 @@ using lmsbox.infrastructure.Data;
 namespace lmsbox.infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20251121133524_AddBrandNameToOrganisation")]
-    partial class AddBrandNameToOrganisation
+    [Migration("20251121143628_SyncModelSnapshot")]
+    partial class SyncModelSnapshot
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
