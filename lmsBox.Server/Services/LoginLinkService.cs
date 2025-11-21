@@ -17,9 +17,9 @@ namespace lmsBox.Server.Services
         private readonly ApplicationDbContext _db;
         private readonly IConfiguration _config;
         private readonly ILogger<LoginLinkService> _logger;
-        private readonly IEmailService? _emailService;
+        private readonly IEmailService _emailService;
 
-        public LoginLinkService(ApplicationDbContext db, IConfiguration config, ILogger<LoginLinkService> logger, IEmailService? emailService = null)
+        public LoginLinkService(ApplicationDbContext db, IConfiguration config, ILogger<LoginLinkService> logger, IEmailService emailService)
         {
             _db = db;
             _config = config;
@@ -81,7 +81,7 @@ namespace lmsBox.Server.Services
                 bool sent = false;
                 string? error = null;
 
-                if (_emailService != null && user.OrganisationID.HasValue)
+                if (user.OrganisationID.HasValue)
                 {
                     // Use the new template-based email
                     try
@@ -103,7 +103,8 @@ namespace lmsBox.Server.Services
                 }
                 else
                 {
-                    // Fallback to old method if EmailService is not available
+                    // Fallback to old method if user has no organization
+                    _logger.LogWarning("User {UserId} has no organization, using fallback email method", user.Id);
                     var (oldSent, oldError) = await SendEmailAsync(user.Email!, "Your sign-in link", $"Click to sign in: {link}", $"<p>Click to sign in: <a href=\"{link}\">{link}</a></p>");
                     sent = oldSent;
                     error = oldError;
