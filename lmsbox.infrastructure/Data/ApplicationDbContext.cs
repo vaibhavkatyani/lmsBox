@@ -71,6 +71,19 @@ namespace lmsbox.infrastructure.Data
             // Optional: keep revoked tokens short-lived and index expiry for cleanup queries
             builder.Entity<RevokedToken>()
                    .HasIndex(r => r.ExpiresAt);
+            
+            // Prevent duplicate progress records - unique constraint on UserId, CourseId, LessonId combination
+            builder.Entity<LearnerProgress>()
+                   .HasIndex(lp => new { lp.UserId, lp.CourseId, lp.LessonId })
+                   .IsUnique();
+            
+            // Index for certificate queries
+            builder.Entity<LearnerProgress>()
+                   .HasIndex(lp => lp.CertificateIssuedAt);
+            
+            // Index for certificate ID lookups
+            builder.Entity<LearnerProgress>()
+                   .HasIndex(lp => lp.CertificateId);
         }
     }
 }

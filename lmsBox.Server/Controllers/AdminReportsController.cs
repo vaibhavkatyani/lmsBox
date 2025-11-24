@@ -2222,6 +2222,134 @@ public class AdminReportsController : ControllerBase
     }
 
     #endregion
+
+    #region Certificate Statistics
+
+    [HttpGet("certificates")]
+    public async Task<IActionResult> GetCertificateStatistics(
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        [FromQuery] string? courseId = null,
+        [FromQuery] long? organisationId = null)
+    {
+        try
+        {
+            var orgId = await GetOrgIdFilter();
+            if (orgId.HasValue)
+            {
+                // OrgAdmin can only see their org
+                organisationId = orgId.Value;
+            }
+
+            var start = startDate ?? DateTime.UtcNow.AddMonths(-6);
+            var end = endDate ?? DateTime.UtcNow;
+
+            // Base query for certificates
+            var certificatesQuery = _context.LearnerProgresses
+                .Include(lp => lp.User)
+                .Include(lp => lp.Course)
+                .Where(lp => lp.CertificateIssuedAt != null
+                    && lp.CertificateIssuedAt >= start
+                    && lp.CertificateIssuedAt <= end
+                    && lp.LessonId == null);
+
+            // Apply filters
+            if (organisationId.HasValue)
+            {
+                certificatesQuery = certificatesQuery.Where(lp => lp.User!.OrganisationID == organisationId.Value);
+            }
+
+            if (!string.IsNullOrEmpty(courseId))
+            {
+                certificatesQuery = certificatesQuery.Where(lp => lp.CourseId == courseId);
+            }
+
+            var certificates = await certificatesQuery.ToListAsync();
+
+            // Total certificates issued
+            var totalCertificates = certificates.Count;
+
+            // Certificates by course
+            var certificatesByCourse = certificates
+                .GroupBy(c => new { c.CourseId, c.Course!.Title })
+                .Select(g => new
+                {
+                    courseId = g.Key.CourseId,
+                    courseName = g.Key.Title,
+                    count = g.Count(),
+                    latestIssued = g.Max(c => c.CertificateIssuedAt)
+                })
+                .OrderByDescending(x => x.count)
+                .ToList();
+
+            // Certificates by organization
+            var certificatesByOrg = certificates
+                .Where(c => c.User?.Organisation != null)
+                .GroupBy(c => new { c.User!.OrganisationID, c.User.Organisation!.Name })
+                .Select(g => new
+                {
+                    organisationId = g.Key.OrganisationID,
+                    organisationName = g.Key.Name,
+                    count = g.Count()
+                })
+                .OrderByDescending(x => x.count)
+                .ToList();
+
+            // Certificates over time (by month)
+            var certificatesByMonth = certificates
+                .GroupBy(c => new
+                {
+                    year = c.CertificateIssuedAt!.Value.Year,
+                    month = c.CertificateIssuedAt!.Value.Month
+                })
+                .Select(g => new
+                {
+                    period = $"{g.Key.year}-{g.Key.month:D2}",
+                    count = g.Count()
+                })
+                .OrderBy(x => x.period)
+                .ToList();
+
+            // Recent certificates
+            var recentCertificates = certificates
+                .OrderByDescending(c => c.CertificateIssuedAt)
+                .Take(10)
+                .Select(c => new
+                {
+                    certificateId = c.CertificateId,
+                    learnerName = $"{c.User!.FirstName} {c.User.LastName}",
+                    courseName = c.Course!.Title,
+                    issuedAt = c.CertificateIssuedAt,
+                    certificateUrl = c.CertificateUrl
+                })
+                .ToList();
+
+            return Ok(new
+            {
+                summary = new
+                {
+                    totalCertificates,
+                    dateRange = new { start, end },
+                    filters = new
+                    {
+                        courseId,
+                        organisationId
+                    }
+                },
+                certificatesByCourse,
+                certificatesByOrganisation = certificatesByOrg,
+                certificatesByMonth,
+                recentCertificates
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating certificate statistics");
+            return StatusCode(500, new { message = "An error occurred while generating certificate statistics" });
+        }
+    }
+
+    #endregion
 }
 
 public class CustomReportRequest

@@ -16,12 +16,18 @@ public class CoursesController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ILogger<CoursesController> _logger;
     private readonly IAzureBlobService _blobService;
+    private readonly ICertificateService _certificateService;
 
-    public CoursesController(ApplicationDbContext context, ILogger<CoursesController> logger, IAzureBlobService blobService)
+    public CoursesController(
+        ApplicationDbContext context, 
+        ILogger<CoursesController> logger, 
+        IAzureBlobService blobService,
+        ICertificateService certificateService)
     {
         _context = context;
         _logger = logger;
         _blobService = blobService;
+        _certificateService = certificateService;
     }
 
     /// <summary>
@@ -145,32 +151,89 @@ public class CoursesController : ControllerBase
                     && lp.CourseId != null
                     && lp.LessonId == null
                     && lp.Completed
-                    && lp.CompletedAt != null)
-                .Select(lp => new CourseItemDto
-                {
-                    Id = lp.Course!.Id.ToString(),
-                    Title = lp.Course.Title,
-                    Banner = "/assets/default-course-banner.png",
-                    Progress = 100,
-                    EnrolledDate = lp.Course.CreatedAt,
-                    LastAccessedDate = null,
-                    IsCompleted = true,
-                    CertificateEligible = true,
-                    CertificateIssuedDate = lp.CompletedAt,
-                    CertificateUrl = null // TODO: Generate certificate URL
-                })
+                    && lp.CompletedAt != null
+                    && lp.Course!.CertificateEnabled)
                 .ToListAsync();
+
+            var certificateDtos = certificates.Select(lp => new CourseItemDto
+            {
+                Id = lp.Course!.Id.ToString(),
+                Title = lp.Course.Title,
+                Banner = "/assets/default-course-banner.png",
+                Progress = 100,
+                EnrolledDate = lp.Course.CreatedAt,
+                LastAccessedDate = null,
+                IsCompleted = true,
+                CertificateEligible = true,
+                CertificateIssuedDate = lp.CompletedAt,
+                CertificateUrl = lp.CertificateUrl // Azure blob URL
+            }).ToList();
 
             return Ok(new CourseListResponse
             {
-                Items = certificates,
-                Total = certificates.Count
+                Items = certificateDtos,
+                Total = certificateDtos.Count
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching certificates");
             return StatusCode(500, new { message = "An error occurred while fetching certificates" });
+        }
+    }
+
+    /// <summary>
+    /// Get or generate certificate URL for a completed course
+    /// </summary>
+    /// <param name="courseId">Course ID</param>
+    /// <returns>Certificate URL from Azure Blob Storage</returns>
+    [HttpGet("{courseId}/certificate")]
+    public async Task<IActionResult> GetCertificate(string courseId)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new { message = "User not authenticated" });
+            }
+
+            _logger.LogInformation("Certificate request for user {UserId}, course {CourseId}", userId, courseId);
+
+            // Check if certificate already exists
+            var existingUrl = await _certificateService.GetCertificateUrlAsync(userId, courseId);
+            if (!string.IsNullOrEmpty(existingUrl))
+            {
+                _logger.LogInformation("Returning existing certificate for user {UserId}, course {CourseId}", userId, courseId);
+                return Ok(new { certificateUrl = existingUrl });
+            }
+
+            // Generate and save certificate to Azure
+            _logger.LogInformation("Generating new certificate for user {UserId}, course {CourseId}", userId, courseId);
+            var certificateUrl = await _certificateService.GenerateAndSaveCertificateAsync(userId, courseId);
+
+            return Ok(new { certificateUrl });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Certificate validation failed for course {CourseId}: {Message}", courseId, ex.Message);
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Services.NotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Resource not found for certificate: {Message}", ex.Message);
+            return NotFound(new { message = ex.Message });
+        }
+        catch (FileNotFoundException ex)
+        {
+            _logger.LogError(ex, "Certificate template file not found: {Message}", ex.Message);
+            return StatusCode(500, new { message = "Certificate template missing. Please contact support." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error getting certificate for user {UserId}, course {CourseId}", User.FindFirstValue(ClaimTypes.NameIdentifier), courseId);
+            return StatusCode(500, new { message = $"An error occurred while generating the certificate: {ex.Message}" });
         }
     }
 
@@ -465,15 +528,24 @@ public class CoursesController : ControllerBase
         var progressPercent = (int)Math.Round((double)completedLessons / totalLessons * 100);
         courseProgress.ProgressPercent = progressPercent;
 
-        // Mark course as completed if all lessons are completed
+        // Mark course as completed if all lessons are completed (only if not already completed)
         var allCompleted = completedLessons == totalLessons;
         if (allCompleted && !courseProgress.Completed)
         {
             courseProgress.Completed = true;
             courseProgress.CompletedAt = DateTime.UtcNow;
             
+            _logger.LogInformation("Course {CourseId} marked as completed for user {UserId} at {CompletedAt}", 
+                courseId, userId, courseProgress.CompletedAt);
+            
             // Update pathway progress if this course is part of any pathways
             await UpdatePathwayProgress(userId, courseId);
+        }
+        else if (!allCompleted && courseProgress.Completed)
+        {
+            // Edge case: If course was marked complete but now isn't (e.g., lessons added)
+            _logger.LogWarning("Course {CourseId} was completed but now has incomplete lessons for user {UserId}", 
+                courseId, userId);
         }
 
         await _context.SaveChangesAsync();

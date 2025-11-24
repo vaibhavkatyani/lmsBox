@@ -36,4 +36,10 @@ public class LearnerProgress
     
     // Current session tracking
     public DateTime? SessionStartTime { get; set; }
+    
+    // Certificate tracking
+    public string? CertificateUrl { get; set; }
+    public string? CertificateId { get; set; }
+    public DateTime? CertificateIssuedAt { get; set; }
+    public string? CertificateIssuedBy { get; set; } // System or Admin who issued
 }

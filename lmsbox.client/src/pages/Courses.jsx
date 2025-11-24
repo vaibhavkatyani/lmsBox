@@ -7,13 +7,44 @@ import { useDebounce } from '../hooks/useDebounce';
 import toast from 'react-hot-toast';
 import usePageTitle from '../hooks/usePageTitle';
 
-const CourseCard = React.memo(function CourseCard({ course, onNavigate }) {
+const CourseCard = React.memo(function CourseCard({ course, onNavigate, isCertificate = false }) {
   const [hover, setHover] = useState(false);
   const [imageError, setImageError] = useState(false);
 
   const handleClick = useCallback(() => {
-    onNavigate(course.id);
-  }, [course.id, onNavigate]);
+    if (isCertificate && course.certificateUrl) {
+      // Open certificate PDF in new tab
+      window.open(course.certificateUrl, '_blank');
+    } else if (isCertificate && !course.certificateUrl) {
+      // Fetch certificate if URL not available
+      const fetchCertificate = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`/api/learner/courses/${course.id}/certificate`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.certificateUrl) {
+              window.open(data.certificateUrl, '_blank');
+            }
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            alert(errorData.message || 'Failed to load certificate. Please try again.');
+          }
+        } catch (error) {
+          console.error('Error fetching certificate:', error);
+          alert('Network error. Please check your connection and try again.');
+        }
+      };
+      fetchCertificate();
+    } else {
+      onNavigate(course.id);
+    }
+  }, [course.id, course.certificateUrl, onNavigate, isCertificate]);
 
   const handleMouseEnter = useCallback(() => setHover(true), []);
   const handleMouseLeave = useCallback(() => setHover(false), []);
@@ -42,9 +73,15 @@ const CourseCard = React.memo(function CourseCard({ course, onNavigate }) {
         {hover && (
             <div className="absolute inset-0 flex items-center justify-center">
             <div className="bg-white/60 rounded-full p-3">
-              <svg className="w-8 h-8 text-(--tenant-primary)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M5 3v18l15-9L5 3z" fill="currentColor" />
-              </svg>
+              {isCertificate ? (
+                <svg className="w-8 h-8 text-(--tenant-primary)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor" />
+                </svg>
+              ) : (
+                <svg className="w-8 h-8 text-(--tenant-primary)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5 3v18l15-9L5 3z" fill="currentColor" />
+                </svg>
+              )}
             </div>
           </div>
         )}
@@ -53,18 +90,32 @@ const CourseCard = React.memo(function CourseCard({ course, onNavigate }) {
       <div className="p-4">
         <h3 className="text-lg font-semibold text-gray-900">{course.title}</h3>
 
-        <div className="mt-4">
-          <div className="h-2 bg-gray-200 rounded overflow-hidden">
-            <div className="h-full bg-(--tenant-primary)" style={{ width: `${Math.min(100, course.progress)}%` }} />
+        {isCertificate ? (
+          <div className="mt-4">
+            <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
+              <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <span>Completed {course.certificateIssuedDate ? new Date(course.certificateIssuedDate).toLocaleDateString() : ''}</span>
+            </div>
+            <button className="w-full bg-(--tenant-primary) text-white font-medium py-2 rounded hover:opacity-90">
+              View Certificate
+            </button>
           </div>
-          <div className="mt-2 text-sm text-gray-600">
-            {course.progress === 0 ? (
-              <span className="inline-block bg-(--tenant-primary) text-white text-xs font-medium px-3 py-1 rounded">START COURSE</span>
-            ) : (
-              <span>{course.progress}% complete</span>
-            )}
+        ) : (
+          <div className="mt-4">
+            <div className="h-2 bg-gray-200 rounded overflow-hidden">
+              <div className="h-full bg-(--tenant-primary)" style={{ width: `${Math.min(100, course.progress)}%` }} />
+            </div>
+            <div className="mt-2 text-sm text-gray-600">
+              {course.progress === 0 ? (
+                <span className="inline-block bg-(--tenant-primary) text-white text-xs font-medium px-3 py-1 rounded">START COURSE</span>
+              ) : (
+                <span>{course.progress}% complete</span>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -259,7 +310,7 @@ export default function Courses({ initialTab = {} }) {
             <div className="col-span-full text-gray-600">No data found.</div>
           ) : (
             visibleCourses.map((c) => (
-              <CourseCard key={c.id} course={c} onNavigate={goToCourse} />
+              <CourseCard key={c.id} course={c} onNavigate={goToCourse} isCertificate={activeTab === 'certificates'} />
             ))
           )}
         </div>

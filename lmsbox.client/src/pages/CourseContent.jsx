@@ -699,16 +699,51 @@ export default function CourseContent() {
                   <div className="mb-4 pb-4 border-b">
                     <h4 className="text-base font-semibold text-gray-900 mb-2">Certificates</h4>
                     <p className="text-sm text-gray-600 mb-3">Get certificate by completing entire course</p>
-                    <button 
-                      disabled={!course.isCompleted}
-                      className={`px-6 py-2 rounded border transition-colors ${
-                        course.isCompleted
-                          ? 'border-purple-500 text-purple-600 hover:bg-purple-50'
-                          : 'border-gray-300 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      Certificate
-                    </button>
+                    {course.isCompleted ? (
+                      <button
+                        onClick={async () => {
+                          try {
+                            toast.loading('Generating certificate...', { id: 'cert-gen' });
+                            const response = await fetch(`/api/learner/courses/${course.id}/certificate`, {
+                              headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                              }
+                            });
+                            
+                            if (response.ok) {
+                              const data = await response.json();
+                              toast.dismiss('cert-gen');
+                              if (data.certificateUrl) {
+                                toast.success('Certificate ready! Opening...');
+                                window.open(data.certificateUrl, '_blank');
+                              } else {
+                                toast.error('Certificate URL not found');
+                              }
+                            } else {
+                              const errorData = await response.json().catch(() => ({}));
+                              toast.dismiss('cert-gen');
+                              console.error('Certificate error response:', errorData);
+                              console.error('Response status:', response.status);
+                              toast.error(errorData.message || 'Failed to generate certificate. Please try again.');
+                            }
+                          } catch (error) {
+                            toast.dismiss('cert-gen');
+                            console.error('Error fetching certificate:', error);
+                            toast.error('Network error. Please check your connection and try again.');
+                          }
+                        }}
+                        className="px-6 py-2 rounded border border-purple-500 bg-purple-500 text-white transition-colors hover:bg-purple-600"
+                      >
+                        View Certificate
+                      </button>
+                    ) : (
+                      <button 
+                        disabled
+                        className="px-6 py-2 rounded border border-gray-300 text-gray-400 cursor-not-allowed"
+                      >
+                        Complete Course to Get Certificate
+                      </button>
+                    )}
                   </div>
 
                   {/* Description Section */}

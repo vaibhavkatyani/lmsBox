@@ -12,6 +12,10 @@ using Microsoft.AspNetCore.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using System.Diagnostics;
+using QuestPDF.Infrastructure;
+
+// Configure QuestPDF Community License
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -205,6 +209,9 @@ builder.Services.AddScoped<lmsBox.Server.Services.IAzureBlobService, lmsBox.Serv
 
 // Audit Log service registration
 builder.Services.AddScoped<lmsBox.Server.Services.IAuditLogService, lmsBox.Server.Services.AuditLogService>();
+
+// Certificate service registration
+builder.Services.AddScoped<lmsBox.Server.Services.ICertificateService, lmsBox.Server.Services.CertificateService>();
 
 var app = builder.Build();
 

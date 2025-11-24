@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using lmsbox.infrastructure.Data;
 
@@ -11,9 +12,11 @@ using lmsbox.infrastructure.Data;
 namespace lmsbox.infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251124084641_AddCertificateTrackingFields")]
+    partial class AddCertificateTrackingFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -645,7 +648,7 @@ namespace lmsbox.infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("CertificateId")
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("CertificateIssuedAt")
                         .HasColumnType("datetime2");
@@ -689,17 +692,11 @@ namespace lmsbox.infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CertificateId");
-
-                    b.HasIndex("CertificateIssuedAt");
-
                     b.HasIndex("CourseId");
 
                     b.HasIndex("LessonId");
 
-                    b.HasIndex("UserId", "CourseId", "LessonId")
-                        .IsUnique()
-                        .HasFilter("[CourseId] IS NOT NULL AND [LessonId] IS NOT NULL");
+                    b.HasIndex("UserId");
 
                     b.ToTable("LearnerProgresses");
                 });
