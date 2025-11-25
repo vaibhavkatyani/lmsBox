@@ -56,6 +56,12 @@ namespace lmsbox.infrastructure.Data
         // Global Library Content (Super Admin managed)
         public DbSet<GlobalLibraryContent> GlobalLibraryContents { get; set; } = null!;
 
+        // Surveys
+        public DbSet<Survey> Surveys { get; set; } = null!;
+        public DbSet<SurveyQuestion> SurveyQuestions { get; set; } = null!;
+        public DbSet<SurveyResponse> SurveyResponses { get; set; } = null!;
+        public DbSet<SurveyQuestionResponse> SurveyQuestionResponses { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);

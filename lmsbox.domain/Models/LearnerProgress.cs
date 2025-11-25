@@ -42,4 +42,13 @@ public class LearnerProgress
     public string? CertificateId { get; set; }
     public DateTime? CertificateIssuedAt { get; set; }
     public string? CertificateIssuedBy { get; set; } // System or Admin who issued
+    
+    // Survey completion tracking
+    public bool PreSurveyCompleted { get; set; } = false;
+    public DateTime? PreSurveyCompletedAt { get; set; }
+    public long? PreSurveyResponseId { get; set; }
+    
+    public bool PostSurveyCompleted { get; set; } = false;
+    public DateTime? PostSurveyCompletedAt { get; set; }
+    public long? PostSurveyResponseId { get; set; }
 }

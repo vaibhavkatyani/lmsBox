@@ -20,5 +20,8 @@ public interface IAuditLogService
     Task LogLessonCompletion(string userId, string userName, string lessonId, string lessonTitle, string courseId, string courseTitle);
     Task LogCourseCompletion(string userId, string userName, string courseId, string courseTitle);
     Task LogCertificateIssuance(string userId, string userName, string courseId, string courseTitle, string certificateId);
+    Task LogSurveyCreation(string userId, string userName, string surveyId, string surveyTitle);
+    Task LogSurveyUpdate(string userId, string userName, string surveyId, string surveyTitle);
+    Task LogSurveyDelete(string userId, string userName, string surveyId, string surveyTitle);
     Task LogCustomAction(string action, string performedBy, string? details = null);
 }

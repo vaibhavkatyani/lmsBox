@@ -11,7 +11,7 @@ namespace lmsBox.Server.Controllers;
 [ApiController]
 [Route("api/learner/courses")]
 [Authorize] // Requires authenticated user
-public class CoursesController : ControllerBase
+public partial class CoursesController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<CoursesController> _logger;
@@ -300,6 +300,11 @@ public class CoursesController : ControllerBase
                 .OrderByDescending(lp => lp.LastAccessedAt)
                 .FirstOrDefault();
 
+            // Determine if lessons are locked due to mandatory pre-survey
+            bool lessonsLocked = course.IsPreSurveyMandatory && 
+                                 course.PreCourseSurveyId.HasValue && 
+                                 !(courseProgress?.PreSurveyCompleted ?? false);
+
             // Map to DTO
             var courseDetail = new CourseDetailDto
             {
@@ -311,6 +316,13 @@ public class CoursesController : ControllerBase
                 IsCompleted = courseProgress?.Completed ?? false,
                 CompletedAt = courseProgress?.CompletedAt,
                 LastAccessedLessonId = lastAccessedProgress?.LessonId?.ToString(),
+                HasPreSurvey = course.PreCourseSurveyId.HasValue,
+                IsPreSurveyMandatory = course.IsPreSurveyMandatory,
+                PreSurveyCompleted = courseProgress?.PreSurveyCompleted ?? false,
+                HasPostSurvey = course.PostCourseSurveyId.HasValue,
+                IsPostSurveyMandatory = course.IsPostSurveyMandatory,
+                PostSurveyCompleted = courseProgress?.PostSurveyCompleted ?? false,
+                LessonsLocked = lessonsLocked,
                 Lessons = course.Lessons.Select(lesson =>
                 {
                     var lessonProgress = lessonProgresses.FirstOrDefault(lp => lp.LessonId == lesson.Id);
@@ -551,27 +563,44 @@ public class CoursesController : ControllerBase
         var allCompleted = completedLessons == totalLessons;
         if (allCompleted && !courseProgress.Completed)
         {
-            courseProgress.Completed = true;
-            courseProgress.CompletedAt = DateTime.UtcNow;
-            
-            _logger.LogInformation("Course {CourseId} marked as completed for user {UserId} at {CompletedAt}", 
-                courseId, userId, courseProgress.CompletedAt);
-            
-            // Log course completion to audit log
-            var user = await _context.Users.FindAsync(userId);
-            var course = await _context.Courses.FindAsync(courseId);
-            if (user != null && course != null)
+            // Check if post-course survey is required
+            var course = await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == courseId);
+            bool canMarkComplete = true;
+
+            if (course != null && course.IsPostSurveyMandatory && course.PostCourseSurveyId.HasValue)
             {
-                await _auditLogService.LogCourseCompletion(
-                    userId, 
-                    $"{user.FirstName} {user.LastName}", 
-                    courseId, 
-                    course.Title
-                );
+                // Post-survey is mandatory - check if completed
+                if (!courseProgress.PostSurveyCompleted)
+                {
+                    canMarkComplete = false;
+                    _logger.LogInformation("Course {CourseId} cannot be marked complete for user {UserId} - post-survey not completed", 
+                        courseId, userId);
+                }
             }
-            
-            // Update pathway progress if this course is part of any pathways
-            await UpdatePathwayProgress(userId, courseId);
+
+            if (canMarkComplete)
+            {
+                courseProgress.Completed = true;
+                courseProgress.CompletedAt = DateTime.UtcNow;
+                
+                _logger.LogInformation("Course {CourseId} marked as completed for user {UserId} at {CompletedAt}", 
+                    courseId, userId, courseProgress.CompletedAt);
+                
+                // Log course completion to audit log
+                var user = await _context.Users.FindAsync(userId);
+                if (user != null && course != null)
+                {
+                    await _auditLogService.LogCourseCompletion(
+                        userId, 
+                        $"{user.FirstName} {user.LastName}", 
+                        courseId, 
+                        course.Title
+                    );
+                }
+                
+                // Update pathway progress if this course is part of any pathways
+                await UpdatePathwayProgress(userId, courseId);
+            }
         }
         else if (!allCompleted && courseProgress.Completed)
         {
@@ -648,6 +677,339 @@ public class CoursesController : ControllerBase
     }
 }
 
+// Survey endpoints for learners
+public partial class CoursesController
+{
+    // GET: api/learner/courses/{courseId}/survey/pre
+    [HttpGet("{courseId}/survey/pre")]
+    public async Task<IActionResult> GetPreCourseSurvey(string courseId)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var course = await _context.Courses
+                .Include(c => c.PreCourseSurvey)
+                    .ThenInclude(s => s!.Questions.OrderBy(q => q.OrderIndex))
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == courseId && !c.IsDeleted);
+
+            if (course == null)
+                return NotFound("Course not found");
+
+            if (course.PreCourseSurveyId == null)
+                return NotFound("No pre-course survey configured for this course");
+
+            // Check if already completed
+            var progress = await _context.LearnerProgresses
+                .FirstOrDefaultAsync(lp => lp.UserId == userId && lp.CourseId == courseId && lp.LessonId == null);
+
+            if (progress?.PreSurveyCompleted == true)
+            {
+                return Ok(new
+                {
+                    alreadyCompleted = true,
+                    completedAt = progress.PreSurveyCompletedAt,
+                    message = "Pre-course survey already completed"
+                });
+            }
+
+            var survey = course.PreCourseSurvey!;
+            return Ok(new
+            {
+                surveyId = survey.Id,
+                title = survey.Title,
+                description = survey.Description,
+                isMandatory = course.IsPreSurveyMandatory,
+                questions = survey.Questions?.Select(q => new
+                {
+                    id = q.Id,
+                    questionText = q.QuestionText,
+                    questionType = q.QuestionType,
+                    options = string.IsNullOrEmpty(q.Options) ? new List<string>() : System.Text.Json.JsonSerializer.Deserialize<List<string>>(q.Options),
+                    isRequired = q.IsRequired,
+                    minRating = q.MinRating,
+                    maxRating = q.MaxRating,
+                    orderIndex = q.OrderIndex
+                }).ToList()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving pre-course survey for course {CourseId}", courseId);
+            return StatusCode(500, "An error occurred while retrieving the survey");
+        }
+    }
+
+    // GET: api/learner/courses/{courseId}/survey/post
+    [HttpGet("{courseId}/survey/post")]
+    public async Task<IActionResult> GetPostCourseSurvey(string courseId)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var course = await _context.Courses
+                .Include(c => c.PostCourseSurvey)
+                    .ThenInclude(s => s!.Questions.OrderBy(q => q.OrderIndex))
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == courseId && !c.IsDeleted);
+
+            if (course == null)
+                return NotFound("Course not found");
+
+            if (course.PostCourseSurveyId == null)
+                return NotFound("No post-course survey configured for this course");
+
+            // Check if already completed
+            var progress = await _context.LearnerProgresses
+                .FirstOrDefaultAsync(lp => lp.UserId == userId && lp.CourseId == courseId && lp.LessonId == null);
+
+            if (progress?.PostSurveyCompleted == true)
+            {
+                return Ok(new
+                {
+                    alreadyCompleted = true,
+                    completedAt = progress.PostSurveyCompletedAt,
+                    message = "Post-course survey already completed"
+                });
+            }
+
+            // Check if all lessons are completed before allowing post-survey
+            var totalLessons = await _context.Lessons.CountAsync(l => l.CourseId == courseId);
+            var completedLessons = await _context.LearnerProgresses
+                .CountAsync(lp => lp.UserId == userId && lp.CourseId == courseId && lp.LessonId != null && lp.Completed);
+
+            if (completedLessons < totalLessons)
+            {
+                return BadRequest(new
+                {
+                    error = "All lessons must be completed before accessing the post-course survey",
+                    completedLessons,
+                    totalLessons
+                });
+            }
+
+            var survey = course.PostCourseSurvey!;
+            return Ok(new
+            {
+                surveyId = survey.Id,
+                title = survey.Title,
+                description = survey.Description,
+                isMandatory = course.IsPostSurveyMandatory,
+                questions = survey.Questions?.Select(q => new
+                {
+                    id = q.Id,
+                    questionText = q.QuestionText,
+                    questionType = q.QuestionType,
+                    options = string.IsNullOrEmpty(q.Options) ? new List<string>() : System.Text.Json.JsonSerializer.Deserialize<List<string>>(q.Options),
+                    isRequired = q.IsRequired,
+                    minRating = q.MinRating,
+                    maxRating = q.MaxRating,
+                    orderIndex = q.OrderIndex
+                }).ToList()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving post-course survey for course {CourseId}", courseId);
+            return StatusCode(500, "An error occurred while retrieving the survey");
+        }
+    }
+
+    // POST: api/learner/courses/{courseId}/survey/pre/submit
+    [HttpPost("{courseId}/survey/pre/submit")]
+    public async Task<IActionResult> SubmitPreCourseSurvey(string courseId, [FromBody] SubmitSurveyRequest request)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var course = await _context.Courses
+                .Include(c => c.PreCourseSurvey)
+                .FirstOrDefaultAsync(c => c.Id == courseId && !c.IsDeleted);
+
+            if (course == null)
+                return NotFound("Course not found");
+
+            if (course.PreCourseSurveyId == null)
+                return BadRequest("No pre-course survey configured for this course");
+
+            // Get or create course progress
+            var progress = await _context.LearnerProgresses
+                .FirstOrDefaultAsync(lp => lp.UserId == userId && lp.CourseId == courseId && lp.LessonId == null);
+
+            if (progress == null)
+            {
+                progress = new LearnerProgress
+                {
+                    UserId = userId,
+                    CourseId = courseId,
+                    LessonId = null,
+                    ProgressPercent = 0,
+                    Completed = false,
+                    LastAccessedAt = DateTime.UtcNow
+                };
+                _context.LearnerProgresses.Add(progress);
+            }
+
+            // Check if already completed
+            if (progress.PreSurveyCompleted)
+                return BadRequest("Pre-course survey already completed");
+
+            // Create survey response
+            var surveyResponse = new SurveyResponse
+            {
+                SurveyId = course.PreCourseSurveyId.Value,
+                UserId = userId,
+                CourseId = courseId,
+                SubmittedAt = DateTime.UtcNow,
+                SurveyType = "PreCourse"
+            };
+
+            _context.SurveyResponses.Add(surveyResponse);
+            await _context.SaveChangesAsync(); // Save to get the ID
+
+            // Save individual question responses
+            if (request.Answers != null && request.Answers.Any())
+            {
+                foreach (var answer in request.Answers)
+                {
+                    var questionResponse = new SurveyQuestionResponse
+                    {
+                        SurveyResponseId = surveyResponse.Id,
+                        SurveyQuestionId = answer.QuestionId,
+                        AnswerText = answer.AnswerText,
+                        SelectedOptions = answer.SelectedOptions != null && answer.SelectedOptions.Any()
+                            ? System.Text.Json.JsonSerializer.Serialize(answer.SelectedOptions)
+                            : null,
+                        RatingValue = answer.RatingValue,
+                        AnsweredAt = DateTime.UtcNow
+                    };
+
+                    _context.Set<SurveyQuestionResponse>().Add(questionResponse);
+                }
+            }
+
+            // Mark pre-survey as completed
+            progress.PreSurveyCompleted = true;
+            progress.PreSurveyCompletedAt = DateTime.UtcNow;
+            progress.PreSurveyResponseId = surveyResponse.Id;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Pre-course survey completed for course {CourseId} by user {UserId}", courseId, userId);
+
+            return Ok(new { message = "Pre-course survey submitted successfully", responseId = surveyResponse.Id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error submitting pre-course survey for course {CourseId}", courseId);
+            return StatusCode(500, "An error occurred while submitting the survey");
+        }
+    }
+
+    // POST: api/learner/courses/{courseId}/survey/post/submit
+    [HttpPost("{courseId}/survey/post/submit")]
+    public async Task<IActionResult> SubmitPostCourseSurvey(string courseId, [FromBody] SubmitSurveyRequest request)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var course = await _context.Courses
+                .Include(c => c.PostCourseSurvey)
+                .FirstOrDefaultAsync(c => c.Id == courseId && !c.IsDeleted);
+
+            if (course == null)
+                return NotFound("Course not found");
+
+            if (course.PostCourseSurveyId == null)
+                return BadRequest("No post-course survey configured for this course");
+
+            // Get course progress
+            var progress = await _context.LearnerProgresses
+                .FirstOrDefaultAsync(lp => lp.UserId == userId && lp.CourseId == courseId && lp.LessonId == null);
+
+            if (progress == null)
+                return BadRequest("Course progress not found");
+
+            // Check if already completed
+            if (progress.PostSurveyCompleted)
+                return BadRequest("Post-course survey already completed");
+
+            // Verify all lessons are completed
+            var totalLessons = await _context.Lessons.CountAsync(l => l.CourseId == courseId);
+            var completedLessons = await _context.LearnerProgresses
+                .CountAsync(lp => lp.UserId == userId && lp.CourseId == courseId && lp.LessonId != null && lp.Completed);
+
+            if (completedLessons < totalLessons)
+                return BadRequest("All lessons must be completed before submitting post-course survey");
+
+            // Create survey response
+            var surveyResponse = new SurveyResponse
+            {
+                SurveyId = course.PostCourseSurveyId.Value,
+                UserId = userId,
+                CourseId = courseId,
+                SubmittedAt = DateTime.UtcNow,
+                SurveyType = "PostCourse"
+            };
+
+            _context.SurveyResponses.Add(surveyResponse);
+            await _context.SaveChangesAsync(); // Save to get the ID
+
+            // Save individual question responses
+            if (request.Answers != null && request.Answers.Any())
+            {
+                foreach (var answer in request.Answers)
+                {
+                    var questionResponse = new SurveyQuestionResponse
+                    {
+                        SurveyResponseId = surveyResponse.Id,
+                        SurveyQuestionId = answer.QuestionId,
+                        AnswerText = answer.AnswerText,
+                        SelectedOptions = answer.SelectedOptions != null && answer.SelectedOptions.Any()
+                            ? System.Text.Json.JsonSerializer.Serialize(answer.SelectedOptions)
+                            : null,
+                        RatingValue = answer.RatingValue,
+                        AnsweredAt = DateTime.UtcNow
+                    };
+
+                    _context.Set<SurveyQuestionResponse>().Add(questionResponse);
+                }
+            }
+
+            // Mark post-survey as completed
+            progress.PostSurveyCompleted = true;
+            progress.PostSurveyCompletedAt = DateTime.UtcNow;
+            progress.PostSurveyResponseId = surveyResponse.Id;
+
+            await _context.SaveChangesAsync();
+
+            // Re-trigger course completion check now that post-survey is complete
+            await UpdateCourseProgress(userId, courseId);
+
+            _logger.LogInformation("Post-course survey completed for course {CourseId} by user {UserId}", courseId, userId);
+
+            return Ok(new { message = "Post-course survey submitted successfully", responseId = surveyResponse.Id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error submitting post-course survey for course {CourseId}", courseId);
+            return StatusCode(500, "An error occurred while submitting the survey");
+        }
+    }
+}
+
 // DTOs
 public class UpdateProgressRequest
 {
@@ -688,6 +1050,15 @@ public class CourseDetailDto
     public DateTime? CompletedAt { get; set; }
     public List<LessonDto> Lessons { get; set; } = new();
     public string? LastAccessedLessonId { get; set; } // ID of the last accessed lesson
+    
+    // Survey information
+    public bool HasPreSurvey { get; set; }
+    public bool IsPreSurveyMandatory { get; set; }
+    public bool PreSurveyCompleted { get; set; }
+    public bool HasPostSurvey { get; set; }
+    public bool IsPostSurveyMandatory { get; set; }
+    public bool PostSurveyCompleted { get; set; }
+    public bool LessonsLocked { get; set; } // True if pre-survey is mandatory and not completed
 }
 
 public class LessonDto
@@ -705,4 +1076,17 @@ public class LessonDto
     public string? QuizId { get; set; }
     public int? VideoTimestamp { get; set; } // Video bookmark in seconds
     public int TotalTimeSpentSeconds { get; set; } // Total time spent on this lesson
+}
+
+public class SubmitSurveyRequest
+{
+    public List<SurveyAnswerDto>? Answers { get; set; }
+}
+
+public class SurveyAnswerDto
+{
+    public long QuestionId { get; set; }
+    public string? AnswerText { get; set; }
+    public List<string>? SelectedOptions { get; set; }
+    public int? RatingValue { get; set; }
 }

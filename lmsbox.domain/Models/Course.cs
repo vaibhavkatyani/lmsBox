@@ -29,6 +29,18 @@ public class Course
     
     public DateTime? UpdatedAt { get; set; }
 
+    // Survey configuration
+    public long? PreCourseSurveyId { get; set; }
+    [ForeignKey(nameof(PreCourseSurveyId))]
+    public Survey? PreCourseSurvey { get; set; }
+
+    public long? PostCourseSurveyId { get; set; }
+    [ForeignKey(nameof(PostCourseSurveyId))]
+    public Survey? PostCourseSurvey { get; set; }
+
+    public bool IsPreSurveyMandatory { get; set; } = false;
+    public bool IsPostSurveyMandatory { get; set; } = false;
+
     // Ownership: course belongs to an organisation
     public long OrganisationId { get; set; }
     [ForeignKey(nameof(OrganisationId))]

@@ -298,4 +298,49 @@ public class AuditLogService : IAuditLogService
         await _context.SaveChangesAsync();
         _logger.LogInformation("Logged certificate issuance: {CertificateId} for course {CourseId} to user {UserId}", certificateId, courseId, userId);
     }
+
+    public async Task LogSurveyCreation(string userId, string userName, string surveyId, string surveyTitle)
+    {
+        var auditLog = new AuditLog
+        {
+            Action = $"Survey Created: {surveyTitle}",
+            PerformedBy = userName,
+            PerformedAt = DateTime.UtcNow,
+            Details = $"Survey ID: {surveyId}, Title: {surveyTitle}, Created By User ID: {userId}"
+        };
+        
+        _context.AuditLogs.Add(auditLog);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Logged survey creation: {SurveyId} by {UserId}", surveyId, userId);
+    }
+
+    public async Task LogSurveyUpdate(string userId, string userName, string surveyId, string surveyTitle)
+    {
+        var auditLog = new AuditLog
+        {
+            Action = $"Survey Updated: {surveyTitle}",
+            PerformedBy = userName,
+            PerformedAt = DateTime.UtcNow,
+            Details = $"Survey ID: {surveyId}, Title: {surveyTitle}, Updated By User ID: {userId}"
+        };
+        
+        _context.AuditLogs.Add(auditLog);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Logged survey update: {SurveyId} by {UserId}", surveyId, userId);
+    }
+
+    public async Task LogSurveyDelete(string userId, string userName, string surveyId, string surveyTitle)
+    {
+        var auditLog = new AuditLog
+        {
+            Action = $"Survey Deleted: {surveyTitle}",
+            PerformedBy = userName,
+            PerformedAt = DateTime.UtcNow,
+            Details = $"Survey ID: {surveyId}, Title: {surveyTitle}, Deleted By User ID: {userId}"
+        };
+        
+        _context.AuditLogs.Add(auditLog);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Logged survey deletion: {SurveyId} by {UserId}", surveyId, userId);
+    }
 }
