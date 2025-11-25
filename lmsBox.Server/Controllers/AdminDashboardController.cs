@@ -132,7 +132,7 @@ public class AdminDashboardController : ControllerBase
                 registrationHistory.Add(new { date = dt.ToString("MMM yyyy"), count });
             }
 
-            // Recent activities - combine recent registrations and completions
+            // Recent activities - combine registrations, lesson completions, course completions, and certificates
             var recentActivitiesList = new System.Collections.Generic.List<object>();
             
             // Get recent user registrations (last 10)
@@ -150,29 +150,66 @@ public class AdminDashboardController : ControllerBase
                 })
                 .ToListAsync();
             
-            // Get recent course completions (last 10)
-            var recentCompletionsQuery = _context.LearnerProgresses
+            // Get recent lesson completions (last 15) - only where LessonId is not null
+            var recentLessonCompletionsQuery = _context.LearnerProgresses
                 .AsNoTracking()
-                .Where(lp => lp.Completed && lp.CompletedAt.HasValue)
+                .Where(lp => lp.Completed && lp.CompletedAt.HasValue && lp.LessonId != null)
                 .OrderByDescending(lp => lp.CompletedAt)
-                .Take(10);
+                .Take(15);
                 
-            var recentCompletions = await recentCompletionsQuery
+            var recentLessonCompletions = await recentLessonCompletionsQuery
                 .Include(lp => lp.User)
+                .Include(lp => lp.Lesson)
                 .Include(lp => lp.Course)
                 .Select(lp => new { 
-                    text = $"{lp.User!.FirstName} {lp.User.LastName} completed {lp.Course!.Title}", 
+                    text = $"{lp.User!.FirstName} {lp.User.LastName} completed lesson '{lp.Lesson!.Title}' in {lp.Course!.Title}", 
                     date = lp.CompletedAt!.Value.ToString("MMM dd, HH:mm"),
                     timestamp = lp.CompletedAt.Value
                 })
                 .ToListAsync();
             
-            // Combine and sort by timestamp
+            // Get recent course completions (last 15) - only where LessonId is null (course-level)
+            var recentCourseCompletionsQuery = _context.LearnerProgresses
+                .AsNoTracking()
+                .Where(lp => lp.Completed && lp.CompletedAt.HasValue && lp.LessonId == null)
+                .OrderByDescending(lp => lp.CompletedAt)
+                .Take(15);
+                
+            var recentCourseCompletions = await recentCourseCompletionsQuery
+                .Include(lp => lp.User)
+                .Include(lp => lp.Course)
+                .Select(lp => new { 
+                    text = $"{lp.User!.FirstName} {lp.User.LastName} completed course '{lp.Course!.Title}'", 
+                    date = lp.CompletedAt!.Value.ToString("MMM dd, HH:mm"),
+                    timestamp = lp.CompletedAt.Value
+                })
+                .ToListAsync();
+            
+            // Get recent certificate issuances (last 15)
+            var recentCertificatesQuery = _context.LearnerProgresses
+                .AsNoTracking()
+                .Where(lp => lp.CertificateIssuedAt.HasValue && !string.IsNullOrEmpty(lp.CertificateId))
+                .OrderByDescending(lp => lp.CertificateIssuedAt)
+                .Take(15);
+                
+            var recentCertificates = await recentCertificatesQuery
+                .Include(lp => lp.User)
+                .Include(lp => lp.Course)
+                .Select(lp => new { 
+                    text = $"Certificate issued to {lp.User!.FirstName} {lp.User.LastName} for {lp.Course!.Title}", 
+                    date = lp.CertificateIssuedAt!.Value.ToString("MMM dd, HH:mm"),
+                    timestamp = lp.CertificateIssuedAt.Value
+                })
+                .ToListAsync();
+            
+            // Combine and sort by timestamp, take most recent 25 activities
             recentActivitiesList.AddRange(recentUsers.Cast<object>());
-            recentActivitiesList.AddRange(recentCompletions.Cast<object>());
+            recentActivitiesList.AddRange(recentLessonCompletions.Cast<object>());
+            recentActivitiesList.AddRange(recentCourseCompletions.Cast<object>());
+            recentActivitiesList.AddRange(recentCertificates.Cast<object>());
             var recentActivities = recentActivitiesList
                 .OrderByDescending(a => ((dynamic)a).timestamp)
-                .Take(20)
+                .Take(25)
                 .Select(a => new { 
                     text = ((dynamic)a).text, 
                     date = ((dynamic)a).date 

@@ -253,4 +253,49 @@ public class AuditLogService : IAuditLogService
         await _context.SaveChangesAsync();
         _logger.LogInformation("Logged custom action: {Action}", action);
     }
+
+    public async Task LogLessonCompletion(string userId, string userName, string lessonId, string lessonTitle, string courseId, string courseTitle)
+    {
+        var auditLog = new AuditLog
+        {
+            Action = $"Lesson Completed: {lessonTitle}",
+            PerformedBy = userName,
+            PerformedAt = DateTime.UtcNow,
+            Details = $"Lesson ID: {lessonId}, Title: {lessonTitle}, Course ID: {courseId}, Course: {courseTitle}, Completed By User ID: {userId}"
+        };
+        
+        _context.AuditLogs.Add(auditLog);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Logged lesson completion: {LessonId} in course {CourseId} by {UserId}", lessonId, courseId, userId);
+    }
+
+    public async Task LogCourseCompletion(string userId, string userName, string courseId, string courseTitle)
+    {
+        var auditLog = new AuditLog
+        {
+            Action = $"Course Completed: {courseTitle}",
+            PerformedBy = userName,
+            PerformedAt = DateTime.UtcNow,
+            Details = $"Course ID: {courseId}, Title: {courseTitle}, Completed By User ID: {userId}"
+        };
+        
+        _context.AuditLogs.Add(auditLog);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Logged course completion: {CourseId} by {UserId}", courseId, userId);
+    }
+
+    public async Task LogCertificateIssuance(string userId, string userName, string courseId, string courseTitle, string certificateId)
+    {
+        var auditLog = new AuditLog
+        {
+            Action = $"Certificate Issued: {courseTitle}",
+            PerformedBy = "System",
+            PerformedAt = DateTime.UtcNow,
+            Details = $"Certificate ID: {certificateId}, Course ID: {courseId}, Course: {courseTitle}, Issued To: {userName} (User ID: {userId})"
+        };
+        
+        _context.AuditLogs.Add(auditLog);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Logged certificate issuance: {CertificateId} for course {CourseId} to user {UserId}", certificateId, courseId, userId);
+    }
 }

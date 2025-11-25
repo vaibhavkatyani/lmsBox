@@ -17,17 +17,20 @@ public class CoursesController : ControllerBase
     private readonly ILogger<CoursesController> _logger;
     private readonly IAzureBlobService _blobService;
     private readonly ICertificateService _certificateService;
+    private readonly IAuditLogService _auditLogService;
 
     public CoursesController(
         ApplicationDbContext context, 
         ILogger<CoursesController> logger, 
         IAzureBlobService blobService,
-        ICertificateService certificateService)
+        ICertificateService certificateService,
+        IAuditLogService auditLogService)
     {
         _context = context;
         _logger = logger;
         _blobService = blobService;
         _certificateService = certificateService;
+        _auditLogService = auditLogService;
     }
 
     /// <summary>
@@ -418,6 +421,22 @@ public class CoursesController : ControllerBase
             {
                 progress.Completed = true;
                 progress.CompletedAt = DateTime.UtcNow;
+                
+                // Log lesson completion to audit log
+                var user = await _context.Users.FindAsync(userId);
+                var lesson = await _context.Lessons.FindAsync(lessonId);
+                var course = await _context.Courses.FindAsync(courseId);
+                if (user != null && lesson != null && course != null)
+                {
+                    await _auditLogService.LogLessonCompletion(
+                        userId, 
+                        $"{user.FirstName} {user.LastName}", 
+                        lessonId.ToString(), 
+                        lesson.Title, 
+                        courseId, 
+                        course.Title
+                    );
+                }
             }
 
             await _context.SaveChangesAsync();
@@ -537,6 +556,19 @@ public class CoursesController : ControllerBase
             
             _logger.LogInformation("Course {CourseId} marked as completed for user {UserId} at {CompletedAt}", 
                 courseId, userId, courseProgress.CompletedAt);
+            
+            // Log course completion to audit log
+            var user = await _context.Users.FindAsync(userId);
+            var course = await _context.Courses.FindAsync(courseId);
+            if (user != null && course != null)
+            {
+                await _auditLogService.LogCourseCompletion(
+                    userId, 
+                    $"{user.FirstName} {user.LastName}", 
+                    courseId, 
+                    course.Title
+                );
+            }
             
             // Update pathway progress if this course is part of any pathways
             await UpdatePathwayProgress(userId, courseId);

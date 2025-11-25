@@ -22,17 +22,20 @@ namespace lmsBox.Server.Services
         private readonly IWebHostEnvironment _env;
         private readonly ILogger<CertificateService> _logger;
         private readonly IAzureBlobService _blobService;
+        private readonly IAuditLogService _auditLogService;
 
         public CertificateService(
             ApplicationDbContext context,
             IWebHostEnvironment env,
             ILogger<CertificateService> logger,
-            IAzureBlobService blobService)
+            IAzureBlobService blobService,
+            IAuditLogService auditLogService)
         {
             _context = context;
             _env = env;
             _logger = logger;
             _blobService = blobService;
+            _auditLogService = auditLogService;
         }
 
         public async Task<string> GetCertificateIdAsync(string userId, string courseId)
@@ -309,6 +312,20 @@ namespace lmsBox.Server.Services
                 progress.CertificateIssuedAt = DateTime.UtcNow;
                 progress.CertificateIssuedBy = "System";
                 await _context.SaveChangesAsync();
+
+                // Log certificate issuance to audit log
+                var user = await _context.Users.FindAsync(userId);
+                var course = await _context.Courses.FindAsync(courseId);
+                if (user != null && course != null)
+                {
+                    await _auditLogService.LogCertificateIssuance(
+                        userId, 
+                        $"{user.FirstName} {user.LastName}", 
+                        courseId, 
+                        course.Title, 
+                        certificateId
+                    );
+                }
 
                 _logger.LogInformation("Certificate generated and saved for user {UserId}, course {CourseId}: {Url}", userId, courseId, certificateUrl);
 
