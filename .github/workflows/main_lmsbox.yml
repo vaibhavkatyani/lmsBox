@@ -47,11 +47,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path ./myapp/wwwroot
           Copy-Item -Path ./lmsbox.client/dist/* -Destination ./myapp/wwwroot -Recurse -Force
 
+      - name: Create deployment package
+        run: |
+          Compress-Archive -Path ./myapp/* -DestinationPath ./deployment.zip
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: .net-app
-          path: ./myapp
+          path: ./deployment.zip
 
   deploy:
     runs-on: windows-latest
@@ -79,5 +83,5 @@ jobs:
         with:
           app-name: 'lmsbox'
           slot-name: 'Production'
-          package: .
+          package: ./deployment.zip
           
