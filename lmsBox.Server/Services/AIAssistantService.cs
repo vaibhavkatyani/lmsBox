@@ -13,15 +13,24 @@ public class AIAssistantService : IAIAssistantService
         var apiKey = configuration["OpenAI:ApiKey"];
         if (string.IsNullOrEmpty(apiKey))
         {
-            throw new InvalidOperationException("OpenAI API key is not configured");
+            _logger = logger;
+            _logger.LogWarning("OpenAI API key is not configured. AI Assistant features will be unavailable.");
+            _chatClient = null!; // Will be checked in methods
         }
-
-        _chatClient = new ChatClient("gpt-4o", new ApiKeyCredential(apiKey));
-        _logger = logger;
+        else
+        {
+            _chatClient = new ChatClient("gpt-4o", new ApiKeyCredential(apiKey));
+            _logger = logger;
+        }
     }
 
     public async Task<string> GenerateCourseOutlineAsync(string topic, string? level, string? duration)
     {
+        if (_chatClient == null)
+        {
+            throw new InvalidOperationException("OpenAI API key is not configured. AI Assistant features are unavailable.");
+        }
+
         try
         {
             var systemPrompt = "You are an expert course designer. Generate a comprehensive course outline in JSON format.";
@@ -64,6 +73,11 @@ Make the descriptions engaging and informative. Include 5-10 lessons depending o
 
     public async Task<string> GenerateLessonContentAsync(string lessonTitle, string? context)
     {
+        if (_chatClient == null)
+        {
+            throw new InvalidOperationException("OpenAI API key is not configured. AI Assistant features are unavailable.");
+        }
+
         try
         {
             var systemPrompt = "You are an expert educator. Generate engaging lesson content in well-formatted plain text with clear structure.";
@@ -108,6 +122,11 @@ Do NOT use HTML tags. Use plain text formatting only.";
 
     public async Task<string> GenerateQuizQuestionsAsync(string topic, int questionCount, string? difficulty)
     {
+        if (_chatClient == null)
+        {
+            throw new InvalidOperationException("OpenAI API key is not configured. AI Assistant features are unavailable.");
+        }
+
         try
         {
             var systemPrompt = "You are an expert at creating educational quiz questions. Generate questions in JSON format.";
@@ -148,6 +167,11 @@ Ensure each question has exactly one correct answer and provide clear explanatio
 
     public async Task<string> ImproveContentAsync(string content, string improvementType)
     {
+        if (_chatClient == null)
+        {
+            throw new InvalidOperationException("OpenAI API key is not configured. AI Assistant features are unavailable.");
+        }
+
         try
         {
             var systemPrompt = "You are an expert editor and content improver.";
@@ -178,6 +202,11 @@ Ensure each question has exactly one correct answer and provide clear explanatio
 
     public async Task<string> ChatAsync(string message, string? context)
     {
+        if (_chatClient == null)
+        {
+            throw new InvalidOperationException("OpenAI API key is not configured. AI Assistant features are unavailable.");
+        }
+
         try
         {
             var systemPrompt = @"You are a helpful AI assistant for an LMS (Learning Management System). 
