@@ -11,6 +11,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminUsersBulkCreate from './pages/AdminUsersBulkCreate';
 import AdminCourses from './pages/AdminCourses';
+import AdminSurveys from './pages/AdminSurveys';
 import AdminReports from './pages/AdminReports';
 import AdminCourseEditor from './pages/AdminCourseEditor';
 import AdminUserGroups from './pages/AdminUserGroups';
@@ -188,6 +189,14 @@ function App() {
             element={
               <AdminRoute>
                 <AdminCourseEditor />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/surveys"
+            element={
+              <AdminRoute>
+                <AdminSurveys />
               </AdminRoute>
             }
           />

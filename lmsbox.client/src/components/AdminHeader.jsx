@@ -121,8 +121,8 @@ export default function AdminHeader({ hideNavigation = false }) {
                     { to: '/admin/users', label: 'Users' },
                     { to: '/admin/courses', label: 'Courses' },
                     { to: '/admin/learning-pathways', label: 'Learning Pathways' },
-                    { to: '/admin/reports', label: 'Reports' },
-                    { to: '/admin/settings', label: 'Settings' }
+                    { to: '/admin/surveys', label: 'Surveys' },
+                    { to: '/admin/reports', label: 'Reports' }
                   ].map((link) => (
                     <li key={link.to} className="nav-item relative group">
                       <NavLink

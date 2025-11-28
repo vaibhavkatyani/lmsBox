@@ -18,8 +18,9 @@ public class Survey
 
     public string? Description { get; set; }
 
-    // Survey type: PreCourse, PostCourse, Standalone
-    public string SurveyType { get; set; } = "Standalone";
+    // Survey status: Draft or Published
+    [Required]
+    public string Status { get; set; } = "Draft";
 
     // Organisation that owns this survey
     public long OrganisationId { get; set; }

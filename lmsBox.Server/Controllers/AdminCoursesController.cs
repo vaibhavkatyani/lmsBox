@@ -164,7 +164,11 @@ public class AdminCoursesController : ControllerBase
                 UpdatedAt = c.UpdatedAt,
                 CreatedByUserName = c.CreatedByUser?.FirstName + " " + c.CreatedByUser?.LastName,
                 OrganisationName = c.Organisation?.Name,
-                LessonCount = c.Lessons.Count
+                LessonCount = c.Lessons.Count,
+                PreCourseSurveyId = c.PreCourseSurveyId,
+                PostCourseSurveyId = c.PostCourseSurveyId,
+                IsPreSurveyMandatory = c.IsPreSurveyMandatory,
+                IsPostSurveyMandatory = c.IsPostSurveyMandatory
             }).ToList();
 
             var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
@@ -247,6 +251,10 @@ public class AdminCoursesController : ControllerBase
                 UpdatedAt = course.UpdatedAt,
                 OrganisationId = course.OrganisationId,
                 OrganisationName = course.Organisation?.Name,
+                PreCourseSurveyId = course.PreCourseSurveyId,
+                PostCourseSurveyId = course.PostCourseSurveyId,
+                IsPreSurveyMandatory = course.IsPreSurveyMandatory,
+                IsPostSurveyMandatory = course.IsPostSurveyMandatory,
                 Lessons = course.Lessons.OrderBy(l => l.Ordinal).Select(l => new AdminLessonDto
                 {
                     Id = l.Id,
@@ -315,7 +323,11 @@ public class AdminCoursesController : ControllerBase
                 OrganisationId = user.OrganisationID ?? 0,
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = DateTime.UtcNow,
+                PreCourseSurveyId = request.PreCourseSurveyId,
+                PostCourseSurveyId = request.PostCourseSurveyId,
+                IsPreSurveyMandatory = request.IsPreSurveyMandatory,
+                IsPostSurveyMandatory = request.IsPostSurveyMandatory
             };
 
             _context.Courses.Add(course);
@@ -345,6 +357,10 @@ public class AdminCoursesController : ControllerBase
                 UpdatedAt = createdCourse.UpdatedAt,
                 OrganisationId = createdCourse.OrganisationId,
                 OrganisationName = createdCourse.Organisation?.Name,
+                PreCourseSurveyId = createdCourse.PreCourseSurveyId,
+                PostCourseSurveyId = createdCourse.PostCourseSurveyId,
+                IsPreSurveyMandatory = createdCourse.IsPreSurveyMandatory,
+                IsPostSurveyMandatory = createdCourse.IsPostSurveyMandatory,
                 Lessons = new List<AdminLessonDto>()
             };
 
@@ -413,6 +429,22 @@ public class AdminCoursesController : ControllerBase
             course.CertificateEnabled = request.CertificateEnabled;
             course.BannerUrl = request.BannerUrl;
             course.UpdatedAt = DateTime.UtcNow;
+
+            // Survey assignments - can only be changed if course is not published
+            if (course.Status != "Published")
+            {
+                course.PreCourseSurveyId = request.PreCourseSurveyId;
+                course.PostCourseSurveyId = request.PostCourseSurveyId;
+                course.IsPreSurveyMandatory = request.IsPreSurveyMandatory;
+                course.IsPostSurveyMandatory = request.IsPostSurveyMandatory;
+            }
+            else if (request.PreCourseSurveyId != course.PreCourseSurveyId || 
+                     request.PostCourseSurveyId != course.PostCourseSurveyId ||
+                     request.IsPreSurveyMandatory != course.IsPreSurveyMandatory ||
+                     request.IsPostSurveyMandatory != course.IsPostSurveyMandatory)
+            {
+                return BadRequest(new { message = "Cannot modify survey settings for published courses." });
+            }
 
             // Only allow lesson modifications if course is NOT published
             if (request.Lessons != null)
@@ -512,6 +544,10 @@ public class AdminCoursesController : ControllerBase
                 UpdatedAt = updatedCourse.UpdatedAt,
                 OrganisationId = updatedCourse.OrganisationId,
                 OrganisationName = updatedCourse.Organisation?.Name,
+                PreCourseSurveyId = updatedCourse.PreCourseSurveyId,
+                PostCourseSurveyId = updatedCourse.PostCourseSurveyId,
+                IsPreSurveyMandatory = updatedCourse.IsPreSurveyMandatory,
+                IsPostSurveyMandatory = updatedCourse.IsPostSurveyMandatory,
                 Lessons = updatedCourse.Lessons.OrderBy(l => l.Ordinal).Select(l => new AdminLessonDto
                 {
                     Id = l.Id,
@@ -1025,6 +1061,10 @@ public class AdminCourseDto
     public string? CreatedByUserName { get; set; }
     public string? OrganisationName { get; set; }
     public int LessonCount { get; set; }
+    public long? PreCourseSurveyId { get; set; }
+    public long? PostCourseSurveyId { get; set; }
+    public bool IsPreSurveyMandatory { get; set; }
+    public bool IsPostSurveyMandatory { get; set; }
 }
 
 public class AdminCourseDetailDto : AdminCourseDto
@@ -1056,6 +1096,10 @@ public class CreateCourseRequest
     public string[]? Tags { get; set; }
     public bool CertificateEnabled { get; set; } = true;
     public string? BannerUrl { get; set; }
+    public long? PreCourseSurveyId { get; set; }
+    public long? PostCourseSurveyId { get; set; }
+    public bool IsPreSurveyMandatory { get; set; } = false;
+    public bool IsPostSurveyMandatory { get; set; } = false;
 }
 
 public class UpdateCourseRequest : CreateCourseRequest

@@ -57,7 +57,7 @@ public class AdminSurveysController : ControllerBase
                     s.Id,
                     s.Title,
                     s.Description,
-                    s.SurveyType,
+                    s.Status,
                     s.IsActive,
                     s.CreatedAt,
                     s.UpdatedAt,
@@ -103,7 +103,7 @@ public class AdminSurveysController : ControllerBase
                 survey.Id,
                 survey.Title,
                 survey.Description,
-                survey.SurveyType,
+                survey.Status,
                 survey.IsActive,
                 survey.CreatedAt,
                 survey.UpdatedAt,
@@ -144,7 +144,6 @@ public class AdminSurveysController : ControllerBase
             {
                 Title = request.Title,
                 Description = request.Description,
-                SurveyType = request.SurveyType ?? "Standalone",
                 OrganisationId = user.OrganisationID!.Value,
                 CreatedByUserId = userId!,
                 IsActive = request.IsActive ?? true,
@@ -187,14 +186,15 @@ public class AdminSurveysController : ControllerBase
             if (survey == null)
                 return NotFound("Survey not found");
 
+            // Prevent editing published surveys
+            if (survey.Status == "Published")
+                return BadRequest("Cannot edit a published survey. Unpublish it first to make changes.");
+
             if (!string.IsNullOrWhiteSpace(request.Title))
                 survey.Title = request.Title;
 
             if (request.Description != null)
                 survey.Description = request.Description;
-
-            if (request.SurveyType != null)
-                survey.SurveyType = request.SurveyType;
 
             if (request.IsActive.HasValue)
                 survey.IsActive = request.IsActive.Value;
@@ -274,6 +274,10 @@ public class AdminSurveysController : ControllerBase
             if (survey == null)
                 return NotFound("Survey not found");
 
+            // Prevent adding questions to published surveys
+            if (survey.Status == "Published")
+                return BadRequest("Cannot add questions to a published survey. Unpublish it first to make changes.");
+
             if (string.IsNullOrWhiteSpace(request.QuestionText))
                 return BadRequest("Question text is required");
 
@@ -333,6 +337,10 @@ public class AdminSurveysController : ControllerBase
             if (question == null)
                 return NotFound("Question not found");
 
+            // Prevent updating questions in published surveys
+            if (question.Survey!.Status == "Published")
+                return BadRequest("Cannot update questions in a published survey. Unpublish it first to make changes.");
+
             if (!string.IsNullOrWhiteSpace(request.QuestionText))
                 question.QuestionText = request.QuestionText;
 
@@ -388,6 +396,10 @@ public class AdminSurveysController : ControllerBase
 
             if (question == null)
                 return NotFound("Question not found");
+
+            // Prevent deleting questions from published surveys
+            if (question.Survey!.Status == "Published")
+                return BadRequest("Cannot delete questions from a published survey. Unpublish it first to make changes.");
 
             _context.SurveyQuestions.Remove(question);
             await _context.SaveChangesAsync();
@@ -626,6 +638,128 @@ public class AdminSurveysController : ControllerBase
             return StatusCode(500, "An error occurred while retrieving survey analytics");
         }
     }
+
+    // PUT: api/admin/surveys/{id}/status
+    [HttpPut("{id}/status")]
+    public async Task<IActionResult> UpdateSurveyStatus(long id, [FromBody] UpdateSurveyStatusRequest request)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return Unauthorized();
+
+            var surveyQuery = _context.Surveys.Where(s => s.Id == id && !s.IsDeleted);
+
+            if (User.IsInRole("OrgAdmin"))
+                surveyQuery = surveyQuery.Where(s => s.OrganisationId == user.OrganisationID);
+
+            var survey = await surveyQuery.FirstOrDefaultAsync();
+
+            if (survey == null)
+                return NotFound("Survey not found");
+
+            if (request.Status != "Draft" && request.Status != "Published")
+                return BadRequest("Status must be either 'Draft' or 'Published'");
+
+            // Validate that survey has at least one question before publishing
+            if (request.Status == "Published")
+            {
+                var questionCount = await _context.SurveyQuestions.CountAsync(q => q.SurveyId == id);
+                if (questionCount == 0)
+                    return BadRequest("Cannot publish a survey without questions");
+            }
+
+            survey.Status = request.Status;
+            survey.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Survey {SurveyId} status changed to {Status} by user {UserId}", id, request.Status, userId);
+
+            return Ok(new { message = $"Survey {request.Status.ToLower()} successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating survey status for survey {SurveyId}", id);
+            return StatusCode(500, "An error occurred while updating survey status");
+        }
+    }
+
+    // POST: api/admin/surveys/{id}/duplicate
+    [HttpPost("{id}/duplicate")]
+    public async Task<IActionResult> DuplicateSurvey(long id)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return Unauthorized();
+
+            var surveyQuery = _context.Surveys
+                .Include(s => s.Questions)
+                .Where(s => s.Id == id && !s.IsDeleted);
+
+            if (User.IsInRole("OrgAdmin"))
+                surveyQuery = surveyQuery.Where(s => s.OrganisationId == user.OrganisationID);
+
+            var originalSurvey = await surveyQuery.FirstOrDefaultAsync();
+
+            if (originalSurvey == null)
+                return NotFound("Survey not found");
+
+            // Create a copy of the survey
+            var duplicatedSurvey = new Survey
+            {
+                Title = $"{originalSurvey.Title} (Copy)",
+                Description = originalSurvey.Description,
+                Status = "Draft", // Always create as draft
+                OrganisationId = originalSurvey.OrganisationId,
+                CreatedByUserId = userId!,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Surveys.Add(duplicatedSurvey);
+            await _context.SaveChangesAsync();
+
+            // Copy all questions
+            if (originalSurvey.Questions != null && originalSurvey.Questions.Any())
+            {
+                foreach (var question in originalSurvey.Questions.OrderBy(q => q.OrderIndex))
+                {
+                    var duplicatedQuestion = new SurveyQuestion
+                    {
+                        SurveyId = duplicatedSurvey.Id,
+                        QuestionText = question.QuestionText,
+                        QuestionType = question.QuestionType,
+                        Options = question.Options,
+                        OrderIndex = question.OrderIndex,
+                        IsRequired = question.IsRequired,
+                        MinRating = question.MinRating,
+                        MaxRating = question.MaxRating,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.SurveyQuestions.Add(duplicatedQuestion);
+                }
+                await _context.SaveChangesAsync();
+            }
+
+            await _auditLogService.LogSurveyCreation(userId!, $"{user.FirstName} {user.LastName}", duplicatedSurvey.Id.ToString(), duplicatedSurvey.Title);
+
+            _logger.LogInformation("Survey {SurveyId} duplicated to {NewSurveyId} by user {UserId}", id, duplicatedSurvey.Id, userId);
+
+            return Ok(new { 
+                id = duplicatedSurvey.Id, 
+                message = "Survey duplicated successfully" 
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error duplicating survey {SurveyId}", id);
+            return StatusCode(500, "An error occurred while duplicating the survey");
+        }
+    }
 }
 
 // DTOs
@@ -633,7 +767,6 @@ public class CreateSurveyRequest
 {
     public string Title { get; set; } = null!;
     public string? Description { get; set; }
-    public string? SurveyType { get; set; }
     public bool? IsActive { get; set; }
 }
 
@@ -641,8 +774,12 @@ public class UpdateSurveyRequest
 {
     public string? Title { get; set; }
     public string? Description { get; set; }
-    public string? SurveyType { get; set; }
     public bool? IsActive { get; set; }
+}
+
+public class UpdateSurveyStatusRequest
+{
+    public string Status { get; set; } = null!;
 }
 
 public class CreateQuestionRequest

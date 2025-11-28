@@ -48,5 +48,17 @@ export const adminSurveyService = {
   async deleteQuestion(surveyId, questionId) {
     const response = await api.delete(`/api/admin/surveys/${surveyId}/questions/${questionId}`);
     return response.data;
+  },
+
+  // Update survey status (Publish/Unpublish)
+  async updateSurveyStatus(surveyId, status) {
+    const response = await api.put(`/api/admin/surveys/${surveyId}/status`, { status });
+    return response.data;
+  },
+
+  // Duplicate a survey
+  async duplicateSurvey(surveyId) {
+    const response = await api.post(`/api/admin/surveys/${surveyId}/duplicate`);
+    return response.data;
   }
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import AdminHeader from '../components/AdminHeader';
 import toast from 'react-hot-toast';
 import { adminSurveyService } from '../services/surveys';
@@ -8,16 +8,18 @@ import usePageTitle from '../hooks/usePageTitle';
 export default function AdminSurveyEditor() {
   const navigate = useNavigate();
   const { surveyId } = useParams();
+  const [searchParams] = useSearchParams();
   const isNew = !surveyId;
+  const isPreviewMode = searchParams.get('preview') === 'true';
 
-  usePageTitle(isNew ? 'Create Survey' : 'Edit Survey');
+  usePageTitle(isNew ? 'Create Survey' : isPreviewMode ? 'Preview Survey' : 'Edit Survey');
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [surveyStatus, setSurveyStatus] = useState('Draft');
   const [form, setForm] = useState({
     title: '',
     description: '',
-    surveyType: 'Standalone',
     isActive: true
   });
   const [questions, setQuestions] = useState([]);
@@ -41,17 +43,17 @@ export default function AdminSurveyEditor() {
     try {
       setLoading(true);
       const data = await adminSurveyService.getSurvey(surveyId);
+      setSurveyStatus(data.status || 'Draft');
       setForm({
         title: data.title,
         description: data.description || '',
-        surveyType: data.surveyType,
         isActive: data.isActive
       });
       setQuestions(data.questions || []);
     } catch (error) {
       console.error('Error loading survey:', error);
       toast.error('Failed to load survey');
-      navigate('/admin/courses');
+      navigate('/admin/surveys');
     } finally {
       setLoading(false);
     }
@@ -172,7 +174,31 @@ export default function AdminSurveyEditor() {
           Back
         </button>
 
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">{isNew ? 'Create Survey' : 'Edit Survey'}</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-6">
+          {isNew ? 'Create Survey' : isPreviewMode ? 'Preview Survey' : 'Edit Survey'}
+          {surveyStatus === 'Published' && !isNew && (
+            <span className="ml-3 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+              Published
+            </span>
+          )}
+        </h1>
+
+        {surveyStatus === 'Published' && !isPreviewMode && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+            <div className="flex">
+              <div className="shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  This survey is published and cannot be edited. Unpublish it first to make changes.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="bg-white rounded-lg shadow p-8">
@@ -192,6 +218,7 @@ export default function AdminSurveyEditor() {
                     onChange={(e) => handleChange('title', e.target.value)}
                     className="w-full border border-gray-300 rounded px-4 py-2"
                     placeholder="Enter survey title"
+                    disabled={surveyStatus === 'Published' || isPreviewMode}
                   />
                 </div>
 
@@ -203,43 +230,38 @@ export default function AdminSurveyEditor() {
                     className="w-full border border-gray-300 rounded px-4 py-2"
                     rows={3}
                     placeholder="Brief description of the survey"
+                    disabled={surveyStatus === 'Published' || isPreviewMode}
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Survey Type</label>
-                    <select
-                      value={form.surveyType}
-                      onChange={(e) => handleChange('surveyType', e.target.value)}
-                      className="w-full border border-gray-300 rounded px-4 py-2"
-                    >
-                      <option value="Standalone">Standalone</option>
-                      <option value="PreCourse">Pre-Course</option>
-                      <option value="PostCourse">Post-Course</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                    <label className="inline-flex items-center gap-2 mt-2">
-                      <input
-                        type="checkbox"
-                        checked={form.isActive}
-                        onChange={(e) => handleChange('isActive', e.target.checked)}
-                        className="rounded text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-700">Active</span>
-                    </label>
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <label className="inline-flex items-center gap-2 mt-2">
+                    <input
+                      type="checkbox"
+                      checked={form.isActive}
+                      onChange={(e) => handleChange('isActive', e.target.checked)}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                      disabled={surveyStatus === 'Published' || isPreviewMode}
+                    />
+                    <span className="text-sm text-gray-700">Active</span>
+                  </label>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-2 border-t">
-                  <button onClick={() => navigate(-1)} className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Cancel</button>
-                  <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 disabled:opacity-50">
-                    {saving ? 'Saving...' : 'Save Survey'}
-                  </button>
-                </div>
+                {surveyStatus !== 'Published' && !isPreviewMode && (
+                  <div className="flex justify-end gap-3 pt-2 border-t">
+                    <button onClick={() => navigate('/admin/surveys')} className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Cancel</button>
+                    <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-boxlms-primary-btn text-boxlms-primary-btn-txt rounded hover:brightness-90 disabled:opacity-50">
+                      {saving ? 'Saving...' : 'Save Survey'}
+                    </button>
+                  </div>
+                )}
+                
+                {(surveyStatus === 'Published' || isPreviewMode) && (
+                  <div className="flex justify-end pt-2 border-t">
+                    <button onClick={() => navigate('/admin/surveys')} className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Back to Surveys</button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -272,20 +294,22 @@ export default function AdminSurveyEditor() {
                               )}
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleEditQuestion(q)}
-                              className="px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteQuestion(q.id)}
-                              className="px-3 py-1 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100"
-                            >
-                              Delete
-                            </button>
-                          </div>
+                          {surveyStatus !== 'Published' && !isPreviewMode && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleEditQuestion(q)}
+                                className="px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteQuestion(q.id)}
+                                className="px-3 py-1 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -293,7 +317,8 @@ export default function AdminSurveyEditor() {
                 )}
 
                 {/* Add/Edit Question Form */}
-                <div className="border rounded p-4 bg-blue-50">
+                {surveyStatus !== 'Published' && !isPreviewMode && (
+                  <div className="border rounded p-4 bg-blue-50">
                   <h3 className="font-medium text-gray-900 mb-4">{editingQuestion ? 'Edit Question' : 'Add New Question'}</h3>
                   <div className="space-y-4">
                     <div>
@@ -422,6 +447,7 @@ export default function AdminSurveyEditor() {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
 
