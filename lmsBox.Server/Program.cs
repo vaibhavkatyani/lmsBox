@@ -12,19 +12,8 @@ using Microsoft.AspNetCore.Diagnostics;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using System.Diagnostics;
-using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Configure QuestPDF Community License - wrap in try-catch to allow startup even if native libs fail
-try
-{
-    QuestPDF.Settings.License = LicenseType.Community;
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Warning: Failed to initialize QuestPDF (PDF certificates may not work): {ex.Message}");
-}
 
 // Configure Application Insights (optional) - uses connection string from config / Azure App Setting
 var aiConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
