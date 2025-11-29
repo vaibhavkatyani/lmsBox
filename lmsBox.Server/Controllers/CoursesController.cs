@@ -1124,7 +1124,7 @@ public class LessonDto
     public string Id { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty; // video, pdf, scorm, quiz
+    public string Type { get; set; } = string.Empty; // video, pdf, scorm, quiz, html
     public string Duration { get; set; } = string.Empty;
     public int Ordinal { get; set; }
     public int Progress { get; set; }

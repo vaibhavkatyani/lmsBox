@@ -92,29 +92,29 @@ Make the descriptions engaging and informative. Include 5-10 lessons depending o
         {
             _logger.LogInformation("Generating lesson content for: {LessonTitle}", lessonTitle);
             
-            var systemPrompt = "You are an expert educator. Generate engaging lesson content in well-formatted plain text with clear structure.";
-            var userPrompt = $@"Create detailed content for a lesson titled: '{lessonTitle}'.
+            var systemPrompt = "You are an expert educator. Generate engaging lesson content as well-formatted HTML.";
+            var userPrompt = $@"Create detailed HTML content for a lesson titled: '{lessonTitle}'.
 {(string.IsNullOrEmpty(context) ? "" : $"Additional context: {context}")}
 
 Generate comprehensive lesson content with the following structure:
 
-INTRODUCTION
-[Brief introduction to the topic and what learners will achieve]
+1. INTRODUCTION section with h2 heading
+2. MAIN CONTENT with h3 subheadings and organized lists
+3. KEY TAKEAWAYS with bullet points
+4. ACTIVITIES/EXERCISES section
 
-MAIN CONTENT
-[Core concepts organized with clear headings and bullet points]
-- Use numbered lists for sequential steps
-- Use bullet points for key concepts
-- Include practical examples where relevant
+Format the response as clean, semantic HTML with:
+- Use <h2> for section headings
+- Use <h3> for subsection headings
+- Use <p> for paragraphs
+- Use <ul> and <li> for bullet points
+- Use <ol> and <li> for numbered lists
+- Use <strong> for emphasis
+- Use <code> for code snippets if needed
+- Add appropriate spacing with margins
 
-KEY TAKEAWAYS
-- [List 3-5 main points learners should remember]
-
-ACTIVITIES/EXERCISES
-[Suggested practice activities or discussion questions]
-
-Format the response as clean, readable text with clear headings, proper spacing, and organized bullet points.
-Do NOT use HTML tags. Use plain text formatting only.";
+Return ONLY the HTML content (no <html>, <head>, or <body> tags - just the content divs).
+Include inline styles for better formatting (fonts, colors, spacing).";
 
             var messages = new List<ChatMessage>
             {

@@ -209,7 +209,7 @@ public class AdminLessonsController : ControllerBase
             }
 
             // Validate lesson type
-            var validTypes = new[] { "content", "video", "quiz", "scorm", "document" };
+            var validTypes = new[] { "content", "video", "quiz", "scorm", "document", "html" };
             if (!validTypes.Contains(request.Type))
             {
                 return BadRequest(new { message = $"Invalid lesson type. Must be one of: {string.Join(", ", validTypes)}" });
@@ -317,7 +317,7 @@ public class AdminLessonsController : ControllerBase
             }
 
             // Validate lesson type
-            var validTypes = new[] { "content", "video", "quiz", "scorm", "document" };
+            var validTypes = new[] { "content", "video", "quiz", "scorm", "document", "html" };
             if (!validTypes.Contains(request.Type))
             {
                 return BadRequest(new { message = $"Invalid lesson type. Must be one of: {string.Join(", ", validTypes)}" });
@@ -801,6 +801,82 @@ public class AdminLessonsController : ControllerBase
     }
 
     /// <summary>
+    /// Upload HTML content as a lesson
+    /// </summary>
+    [HttpPost("{courseId}/html")]
+    public async Task<ActionResult<HtmlUploadResponse>> UploadHtmlContent(string courseId, [FromBody] UploadHtmlRequest request)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userRole = User.FindFirstValue(ClaimTypes.Role);
+
+            if (string.IsNullOrEmpty(request.HtmlContent))
+            {
+                return BadRequest(new { message = "HTML content is required" });
+            }
+
+            if (string.IsNullOrEmpty(request.Title))
+            {
+                return BadRequest(new { message = "Title is required" });
+            }
+
+            var course = await _context.Courses.FindAsync(courseId);
+            if (course == null)
+            {
+                return NotFound(new { message = "Course not found" });
+            }
+
+            if (!_blobService.IsConfigured())
+            {
+                return StatusCode(500, new { message = "Azure Blob Storage is not configured" });
+            }
+
+            // Get user's organisation
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null || user.OrganisationID == 0)
+            {
+                return BadRequest(new { message = "User organisation not found" });
+            }
+
+            _logger.LogInformation("Uploading HTML content for course {CourseId}", courseId);
+
+            // Create a sanitized filename from the title
+            var sanitizedTitle = string.Join("_", request.Title.Split(Path.GetInvalidFileNameChars()));
+            var fileName = $"{sanitizedTitle}_{Guid.NewGuid()}.html";
+
+            // Convert HTML string to stream
+            var htmlBytes = System.Text.Encoding.UTF8.GetBytes(request.HtmlContent);
+            using var stream = new MemoryStream(htmlBytes);
+
+            // Upload to blob storage in html-lessons folder
+            var htmlUrl = await _blobService.UploadToCustomPathAsync(
+                stream,
+                fileName,
+                $"orgs/{user.OrganisationID}/html-lessons",
+                "text/html"
+            );
+
+            var response = new HtmlUploadResponse
+            {
+                HtmlUrl = htmlUrl,
+                FileName = fileName,
+                Title = request.Title,
+                Size = htmlBytes.Length
+            };
+
+            _logger.LogInformation("HTML content uploaded successfully: {FileName}", fileName);
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading HTML content for course {CourseId}", courseId);
+            return StatusCode(500, new { message = "An error occurred while uploading the HTML content" });
+        }
+    }
+
+    /// <summary>
     /// Reorder lessons
     /// </summary>
     [HttpPut("reorder")]
@@ -925,6 +1001,20 @@ public class ScormUploadResponse
     public string ManifestPath { get; set; } = null!;
     public int FileCount { get; set; }
     public long TotalSize { get; set; }
+}
+
+public class UploadHtmlRequest
+{
+    public string Title { get; set; } = null!;
+    public string HtmlContent { get; set; } = null!;
+}
+
+public class HtmlUploadResponse
+{
+    public string HtmlUrl { get; set; } = null!;
+    public string FileName { get; set; } = null!;
+    public string Title { get; set; } = null!;
+    public long Size { get; set; }
 }
 
 public class ReorderLessonsRequest
