@@ -180,7 +180,8 @@ try {
             score: '',
             location: '',
             suspendData: '',
-            initialized: false
+            initialized: false,
+            dataLoaded: false  // Flag to prevent saves until data is loaded
         };
         
         // Listen for saved SCORM data from parent window
@@ -195,6 +196,7 @@ try {
                 if (saved.lessonLocation) stubData.location = saved.lessonLocation;
                 if (saved.suspendData) stubData.suspendData = saved.suspendData;
                 stubData.initialized = true;
+                stubData.dataLoaded = true;  // Mark that saved data has been loaded
                 console.log('✅ SCORM stub: initialized with saved data:', {
                     status: stubData.lessonStatus,
                     score: stubData.score,
@@ -210,13 +212,28 @@ try {
             window.parent.postMessage({
                 type: 'scorm-request-data'
             }, '*');
+            
+            // If no saved data arrives within 1 second, assume first launch and enable saves
+            setTimeout(function() {
+                if (!stubData.dataLoaded) {
+                    console.log('⏰ SCORM stub: no saved data received - enabling saves for first launch');
+                    stubData.dataLoaded = true;
+                }
+            }, 1000);
         } catch(e) {
             console.warn('SCORM stub: could not request data from parent', e);
+            stubData.dataLoaded = true;  // Enable saves if parent communication fails
         }
         
         // Helper to notify parent window to save data with debouncing
         var saveTimeout = null;
         function notifyParentToSave() {
+            // Don't save if data hasn't been loaded yet (prevents saving initial values)
+            if (!stubData.dataLoaded) {
+                console.log('⏸️ SCORM stub: skipping save - waiting for data to load');
+                return;
+            }
+            
             // Debounce saves - only save once every 2 seconds
             if (saveTimeout) {
                 clearTimeout(saveTimeout);
