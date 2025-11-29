@@ -20,7 +20,16 @@ public class AIAssistantService : IAIAssistantService
         }
         else
         {
-            _chatClient = new ChatClient("gpt-4o", new ApiKeyCredential(apiKey));
+            try
+            {
+                _chatClient = new ChatClient("gpt-4o", new ApiKeyCredential(apiKey));
+                _logger.LogInformation("OpenAI ChatClient initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to initialize OpenAI ChatClient");
+                _chatClient = null!;
+            }
         }
     }
 
@@ -75,11 +84,14 @@ Make the descriptions engaging and informative. Include 5-10 lessons depending o
     {
         if (_chatClient == null)
         {
+            _logger.LogWarning("Attempted to generate lesson content but ChatClient is null");
             throw new InvalidOperationException("OpenAI API key is not configured. AI Assistant features are unavailable.");
         }
 
         try
         {
+            _logger.LogInformation("Generating lesson content for: {LessonTitle}", lessonTitle);
+            
             var systemPrompt = "You are an expert educator. Generate engaging lesson content in well-formatted plain text with clear structure.";
             var userPrompt = $@"Create detailed content for a lesson titled: '{lessonTitle}'.
 {(string.IsNullOrEmpty(context) ? "" : $"Additional context: {context}")}
@@ -110,12 +122,14 @@ Do NOT use HTML tags. Use plain text formatting only.";
                 new UserChatMessage(userPrompt)
             };
 
+            _logger.LogDebug("Calling OpenAI API...");
             var response = await _chatClient.CompleteChatAsync(messages);
+            _logger.LogInformation("Successfully generated lesson content");
             return response.Value.Content[0].Text;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating lesson content");
+            _logger.LogError(ex, "Error generating lesson content for: {LessonTitle}", lessonTitle);
             throw;
         }
     }
