@@ -49,6 +49,9 @@ export default function AdminCourseEditor() {
   // Surveys state (for dropdowns)
   const [availableSurveys, setAvailableSurveys] = useState([]);
   const [surveysLoading, setSurveysLoading] = useState(false);
+  
+  // Lessons state
+  const [lessons, setLessons] = useState([]);
 
   // Set active tab from query parameter
   useEffect(() => {
@@ -164,8 +167,6 @@ export default function AdminCourseEditor() {
     }
   };
 
-  // Lessons state
-  const [lessons, setLessons] = useState([]);
   const [isEditingLesson, setIsEditingLesson] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
   const [draftLesson, setDraftLesson] = useState({

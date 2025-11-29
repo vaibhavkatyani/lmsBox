@@ -803,7 +803,7 @@ public class AdminLessonsController : ControllerBase
     /// <summary>
     /// Upload HTML content as a lesson
     /// </summary>
-    [HttpPost("{courseId}/html")]
+    [HttpPost("html")]
     public async Task<ActionResult<HtmlUploadResponse>> UploadHtmlContent(string courseId, [FromBody] UploadHtmlRequest request)
     {
         try

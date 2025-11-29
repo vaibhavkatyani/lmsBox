@@ -121,7 +121,7 @@ const lessonsService = {
   // Upload HTML content
   uploadHtmlContent: async (courseId, title, htmlContent) => {
     const response = await api.post(
-      `/api/admin/lessons/${courseId}/html`,
+      `/api/admin/courses/${courseId}/lessons/html`,
       {
         title,
         htmlContent,
