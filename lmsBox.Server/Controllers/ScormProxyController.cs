@@ -197,6 +197,7 @@ try {
                 if (saved.suspendData) stubData.suspendData = saved.suspendData;
                 stubData.initialized = true;
                 stubData.dataLoaded = true;  // Mark that saved data has been loaded
+                stubData.loadTime = Date.now();  // Record when data was loaded
                 console.log('✅ SCORM stub: initialized with saved data:', {
                     status: stubData.lessonStatus,
                     score: stubData.score,
@@ -415,6 +416,17 @@ try {
             },
             LMSSetValue: function(element, value) {
                 console.log('SCORM 1.2: LMSSetValue', element, value);
+                
+                // Prevent overwriting loaded bookmark right after data loads
+                if (element === 'cmi.core.lesson_location' && stubData.dataLoaded && stubData.location && stubData.location !== value) {
+                    // Allow changes after a brief period (2 seconds), but block immediate overwrites
+                    var timeSinceLoad = Date.now() - (stubData.loadTime || 0);
+                    if (timeSinceLoad < 2000) {
+                        console.log('⚠️ SCORM stub: blocking location change from', value, 'to preserve loaded bookmark:', stubData.location);
+                        return 'true';  // Pretend it succeeded but don't change the value
+                    }
+                }
+                
                 if (element === 'cmi.core.lesson_status') stubData.lessonStatus = value;
                 if (element === 'cmi.core.score.raw') stubData.score = value;
                 if (element === 'cmi.core.lesson_location') stubData.location = value;
