@@ -498,8 +498,8 @@ export default function AdminCourseEditor() {
         toast.success('Course created successfully! Now add lessons in the Lessons tab.');
         // Stay on the page and switch to lessons tab
         setActiveTab('lessons');
-        // Update the URL to edit mode
-        navigate(`/admin/courses/edit/${_savedCourse.id}?tab=lessons`, { replace: true });
+        // Update the URL to edit mode (correct route order)
+        navigate(`/admin/courses/${_savedCourse.id}/edit?tab=lessons`, { replace: true });
       } else {
         _savedCourse = await adminCourseService.updateCourse(courseId, courseData);
         toast.success('Course updated successfully!');
