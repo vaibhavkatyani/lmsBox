@@ -481,18 +481,29 @@ const AIAssistant = ({ context = '', onApplyContent = null, mode = 'floating', i
                     <div className="mt-4 p-4 bg-gray-50 border rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="font-medium text-gray-900">Generated Content</h3>
-                        {onApplyContent && (
+                        <div className="flex gap-2">
+                          {onApplyContent && (
+                            <button
+                              onClick={() => handleApply(lessonContent, false)}
+                              className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                            >
+                              Apply
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleApply(lessonContent, false)}
-                            className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                            onClick={() => window.dispatchEvent(new CustomEvent('createHtmlLesson', { 
+                              detail: { title: lessonTitle, htmlContent: lessonContent }
+                            }))}
+                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                           >
-                            Apply
+                            Create HTML Lesson
                           </button>
-                        )}
+                        </div>
                       </div>
-                      <pre className="whitespace-pre-wrap text-sm text-gray-700 max-h-96 overflow-y-auto font-sans">
-                        {lessonContent}
-                      </pre>
+                      <div 
+                        className="prose max-w-none text-sm text-gray-700 max-h-96 overflow-y-auto p-4 bg-white rounded border"
+                        dangerouslySetInnerHTML={{ __html: lessonContent }}
+                      />
                     </div>
                   )}
                 </div>

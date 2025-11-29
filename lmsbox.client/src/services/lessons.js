@@ -118,6 +118,18 @@ const lessonsService = {
     return response.data;
   },
 
+  // Upload HTML content
+  uploadHtmlContent: async (courseId, title, htmlContent) => {
+    const response = await api.post(
+      `/api/admin/lessons/${courseId}/html`,
+      {
+        title,
+        htmlContent,
+      }
+    );
+    return response.data;
+  },
+
   // Reorder lessons
   reorderLessons: async (courseId, lessonOrders) => {
     const response = await api.put(`/api/admin/courses/${courseId}/lessons/reorder`, {

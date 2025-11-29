@@ -73,6 +73,45 @@ export default function AdminCourseEditor() {
     }
   }, [activeTab, courseId, isNew]);
 
+  // Listen for HTML lesson creation from AI Assistant
+  useEffect(() => {
+    const handleCreateHtmlLesson = async (event) => {
+      const { title, htmlContent } = event.detail;
+      
+      if (!courseId) {
+        toast.error('Please save the course first before creating lessons');
+        return;
+      }
+
+      try {
+        toast.loading('Creating HTML lesson...', { id: 'html-lesson' });
+        
+        // Upload HTML content to Azure Blob
+        const uploadResult = await lessonsService.uploadHtmlContent(courseId, title, htmlContent);
+        
+        // Create the lesson
+        const newLesson = await lessonsService.createLesson(courseId, {
+          title: title,
+          type: 'html',
+          documentUrl: uploadResult.htmlUrl,
+          ordinal: lessons.length + 1,
+          isOptional: false
+        });
+        
+        setLessons([...lessons, newLesson]);
+        toast.success('HTML lesson created successfully!', { id: 'html-lesson' });
+        setActiveTab('lessons'); // Switch to lessons tab
+        setAiAssistantOpen(false); // Close AI Assistant
+      } catch (error) {
+        console.error('Error creating HTML lesson:', error);
+        toast.error('Failed to create HTML lesson', { id: 'html-lesson' });
+      }
+    };
+
+    window.addEventListener('createHtmlLesson', handleCreateHtmlLesson);
+    return () => window.removeEventListener('createHtmlLesson', handleCreateHtmlLesson);
+  }, [courseId, lessons, isNew]);
+
   const loadCourse = async () => {
     try {
       setLoading(true);
